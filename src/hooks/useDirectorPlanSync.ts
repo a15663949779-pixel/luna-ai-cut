@@ -9,7 +9,7 @@ import {
   nextDirectorPlanBaseline,
   type DirectorPlanSyncBaseline,
 } from '../lib/directorPlanSync'
-import type { DirectorLanPlanSummary } from '../shared/types'
+import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
 import { DirectorPlanWriteFailures, isPermanentDirectorPlanWriteError, type DirectorPlanWriteFailure } from '../lib/directorPlanWriteFailures'
 
 export type DirectorPlanSyncStatus = 'idle' | 'syncing' | 'synced' | 'conflict' | 'offline' | 'error'
@@ -27,6 +27,7 @@ interface UseDirectorPlanSyncOptions {
   mergeLocalPlans: (plans: DirectorLanPlanSummary[]) => void
   isPlanWritePending: (planId: string) => boolean
   setPlanWritePending: (planId: string, pending: boolean) => void
+  getPlanSchema: () => DirectorPlanSchema
   onConflict: (plan: DirectorLanPlanSummary) => void
 }
 
@@ -46,6 +47,7 @@ export function useDirectorPlanSync({
   mergeLocalPlans,
   isPlanWritePending,
   setPlanWritePending,
+  getPlanSchema,
   onConflict,
 }: UseDirectorPlanSyncOptions) {
   const [status, setStatus] = useState<DirectorPlanSyncStatus>(enabled && endpoint ? 'idle' : 'offline')
@@ -327,13 +329,14 @@ export function useDirectorPlanSync({
     }
 
     async function writePhonePlan(local: DirectorLanPlanSummary, method: 'POST' | 'PATCH', revision: number, signature: string) {
-      const key = JSON.stringify([activeEndpoint, method, revision, directorPlanContentSignature(local)])
+      const schema = getPlanSchema()
+      const key = JSON.stringify([activeEndpoint, method, revision, directorPlanContentSignature(local), schema])
       const blocked = failuresRef.current.blocked(local.id, key)
       if (blocked) throw new Error(blocked.message)
       try {
         const updated = await window.luna.lunaKaHttpClient.request<DirectorLanPlanSummary>(activeEndpoint,
           `/api/v1/director/plans/${encodeURIComponent(local.id)}`, {
-            method, body: buildDirectorPlanUpdate(local, revision, method !== 'POST'),
+            method, body: buildDirectorPlanUpdate(local, revision, method !== 'POST', schema),
           })
         if (method !== 'POST') assertDirectorTakeRangesSaved(local, updated)
         await window.luna.directorLab.acknowledgeLocalPlan(updated, signature)
@@ -368,6 +371,7 @@ export function useDirectorPlanSync({
     onConflict,
     requestRemotePlans,
     setPlanWritePending,
+    getPlanSchema,
   ])
 
   const resolveConflict = useCallback(async (planId: string, source: 'remote' | 'local', reviewed: DirectorPlanConflict) => {
@@ -401,7 +405,7 @@ export function useDirectorPlanSync({
         selected = await window.luna.lunaKaHttpClient.request<DirectorLanPlanSummary>(
           endpoint, `/api/v1/director/plans/${encodeURIComponent(planId)}`, {
             method: 'PATCH',
-            body: buildDirectorPlanUpdate(local, directorPlanRevision(remote)),
+            body: buildDirectorPlanUpdate(local, directorPlanRevision(remote), true, getPlanSchema()),
           },
         )
       }
@@ -426,7 +430,7 @@ export function useDirectorPlanSync({
       resolvingRef.current = false
       setResolvingPlanId(null)
     }
-  }, [enabled, endpoint, mergeLocalPlans, mergeRemotePlans, requestRemotePlans, setPlanWritePending])
+  }, [enabled, endpoint, getPlanSchema, mergeLocalPlans, mergeRemotePlans, requestRemotePlans, setPlanWritePending])
 
   useEffect(() => {
     if (!enabled || !endpoint) return

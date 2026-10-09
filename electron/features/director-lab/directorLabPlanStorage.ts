@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
@@ -47,6 +47,37 @@ export function mediaFileName(takeIndex: number, fileName: string): string {
 
 export function planDirectory(planTitle: string): string {
   return safePathPart(planTitle, '导演计划')
+}
+
+export function directorPlanDirectory(planId: string): string {
+  return safePathPart(planId, 'plan')
+}
+
+export async function directorPlanDirectoryForId(
+  rootDirectory: string,
+  planId: string,
+): Promise<string> {
+  const directoryName = directorPlanDirectory(planId)
+  let directory = path.join(rootDirectory, directoryName)
+  const owner = await readPlanId(directory)
+  if (owner && owner !== planId) {
+    const suffix = createHash('sha256').update(planId).digest('hex').slice(0, 16)
+    directory = path.join(rootDirectory, `${directoryName}_${suffix}`)
+    const fallbackOwner = await readPlanId(directory)
+    if (fallbackOwner && fallbackOwner !== planId) throw new Error('计划 ID 目录冲突')
+  }
+  return directory
+}
+
+async function readPlanId(directory: string): Promise<string | null> {
+  try {
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(directory, 'manifest.json'), 'utf8'),
+    ) as { plan_id?: unknown }
+    return typeof manifest.plan_id === 'string' ? manifest.plan_id : null
+  } catch {
+    return null
+  }
 }
 
 export function legacyShotAttribute(
@@ -101,7 +132,13 @@ export function manifestForPlan(
     format: 'luna-director-plan-v1',
     plan_id: plan.id,
     title: plan.title,
+    ...(plan.kind ? { kind: plan.kind } : {}),
     main_content: plan.main_content ?? '',
+    rough_cut: plan.rough_cut ?? null,
+    rough_cut_bpm: plan.rough_cut_bpm,
+    rough_cut_music_enabled: plan.rough_cut_music_enabled ?? true,
+    rough_cut_takes: plan.rough_cut_takes ?? {},
+    rough_cut_ranges: plan.rough_cut_ranges ?? {},
     created_at: plan.created_at,
     updated_at: plan.updated_at,
     revision: plan.revision ?? 0,
@@ -207,6 +244,8 @@ async function localFileExists(filePath: string): Promise<boolean> {
 }
 
 async function findPlanDirectoryById(rootDirectory: string, planId: string): Promise<string | null> {
+  const preferredDirectory = await directorPlanDirectoryForId(rootDirectory, planId)
+  if (await readPlanId(preferredDirectory) === planId) return preferredDirectory
   let entries: import('node:fs').Dirent[]
   try {
     entries = await fs.readdir(rootDirectory, { withFileTypes: true })
@@ -243,7 +282,7 @@ async function reconcileLocalDirectorPlanUnlocked(
   metadata: Record<string, DirectorLabMediaMetadata>,
   resolveConflict: boolean,
 ): Promise<boolean> {
-  let directory = path.join(rootDirectory, planDirectory(plan.title))
+  let directory = await directorPlanDirectoryForId(rootDirectory, plan.id)
   const existingDirectory = await findPlanDirectoryById(rootDirectory, plan.id)
   if (existingDirectory && path.resolve(existingDirectory) !== path.resolve(directory)) {
     try {
@@ -260,10 +299,7 @@ async function reconcileLocalDirectorPlanUnlocked(
     // A plan downloaded one take at a time may not have a manifest yet.
   }
   if (typeof existing?.plan_id === 'string' && existing.plan_id !== plan.id) {
-    directory = path.join(rootDirectory, `${planDirectory(plan.title)}_${safePathPart(plan.id, 'plan')}`)
-    manifestPath = path.join(directory, 'manifest.json')
-    existing = JSON.parse(await fs.readFile(manifestPath, 'utf8').catch(() => 'null')) as ExistingManifest | null
-    if (existing?.plan_id && existing.plan_id !== plan.id) return false
+    return false
   }
   const pendingShotIds = Array.isArray(existing?.pending_shot_ids)
     ? existing!.pending_shot_ids.filter((shotId): shotId is string => typeof shotId === 'string')

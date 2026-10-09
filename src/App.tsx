@@ -26,14 +26,14 @@ function App() {
   useEffect(() => {
     if (isLivePreviewWindow) return
     return window.luna.aiEditor.agent.onActivate(() => {
-      if (window.location.hash !== '#/ai-editor') navigate('/ai-editor')
+      if (window.location.hash !== '#/projects') navigate('/projects')
     })
   }, [navigate, isLivePreviewWindow])
 
   useEffect(() => {
     if (isLivePreviewWindow) return
     return window.luna.aiEditor.onOpenProject(projectId => {
-      navigate('/ai-editor', { state: { projectId } })
+      navigate('/projects', { state: { projectId } })
     })
   }, [navigate, isLivePreviewWindow])
 

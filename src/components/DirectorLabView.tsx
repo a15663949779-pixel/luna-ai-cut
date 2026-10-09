@@ -1,6 +1,6 @@
 import { useAgentChat } from './agent-chat/agentChatContext'
 import { useEffect } from 'react'
-import { ArrowLeft, Box, FolderSync, FolderDown, FolderOpen, ListFilter, Pencil, RefreshCw, Save, Search, WandSparkles, X, FileUp } from 'lucide-react'
+import { ArrowLeft, Box, FolderSync, FolderDown, FolderOpen, ListFilter, Pencil, RefreshCw, Save, Scissors, Search, WandSparkles, X, FileUp } from 'lucide-react'
 import { DirectorMaterialSyncControl } from './DirectorMaterialSyncControl'
 import { Button, IconButton, Input, LoadingIndicator, Select, Tooltip } from '../ui'
 import { DirectorMediaPreviewDialog } from './DirectorMediaPreviewDialog'
@@ -11,11 +11,18 @@ import { DirectorPlanConflictDialog } from './DirectorPlanConflictDialog'
 import { DirectorPlanImportDialog } from './DirectorPlanImportDialog'
 import { DirectorPlanMainContent } from './DirectorPlanMainContent'
 import { useDirectorLab } from '../hooks/useDirectorLab'
+import type { DirectorLanPlanSummary } from '../shared/types'
 import '../styles/lab.css'
 import './DirectorLabView.css'
 
 interface DirectorLabViewProps {
   active: boolean
+  selectedPlanId?: string | null
+  onPlansChange?(plans: DirectorLanPlanSummary[]): void
+  onSelectPlan?(planId: string | null): void
+  onReturnToProjects?(): void
+  onConnectedEndpointChange?(endpoint: string | null): void
+  onCreateEditFromPlan?(plan: DirectorLanPlanSummary): void
 }
 
 function formatPlanCreatedAt(value: string | null | undefined): string {
@@ -33,7 +40,8 @@ function formatPlanCreatedAt(value: string | null | undefined): string {
 }
 
 
-export function DirectorLabView({ active }: DirectorLabViewProps) {
+export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelectPlan,
+  onReturnToProjects, onConnectedEndpointChange, onCreateEditFromPlan }: DirectorLabViewProps) {
   const {
     handlePlanDeleted,
     connectedEndpoint,
@@ -87,6 +95,13 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
   } = useDirectorLab(active)
 
   const { setPageContext } = useAgentChat()
+  useEffect(() => {
+    if (selectedPlanId === undefined) return
+    if (selectedPlanId === null) setActivePlanId(null)
+    else if (plans.some(plan => plan.id === selectedPlanId)) setActivePlanId(selectedPlanId)
+  }, [plans, selectedPlanId, setActivePlanId])
+  useEffect(() => onPlansChange?.(plans), [onPlansChange, plans])
+  useEffect(() => onConnectedEndpointChange?.(connectedEndpoint), [connectedEndpoint, onConnectedEndpointChange])
   const contextualPlanId = active && activePlan?.local_directory ? activePlan.id : undefined
   useEffect(() => {
     setPageContext(contextualPlanId ? { directorPlanId: contextualPlanId } : {})
@@ -104,14 +119,19 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
     <div className="lab-page lab-director-page">
       <header className="lab-director-page-header">
         <div className="lab-title-block">
-          {activePlan && <Tooltip content="返回计划列表">
+          {activePlan && !onReturnToProjects && <Tooltip content="返回计划列表">
             <IconButton
               variant="ghost"
               size="compact"
               icon={<ArrowLeft size={15} />}
               aria-label="返回计划列表"
               onClick={() => {
+                if (onReturnToProjects) {
+                  onReturnToProjects()
+                  return
+                }
                 setActivePlanId(null)
+                onSelectPlan?.(null)
                 setEditingPlanTitle(false)
                 setPreviewTakeId(null)
                 setShotQuery('')
@@ -170,6 +190,7 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
           deletingDisabled={downloading != null || syncStatus === 'syncing'}
           onSelect={(planId) => {
             setActivePlanId(planId)
+            onSelectPlan?.(planId)
             setShotQuery('')
             setShotSort('order')
             setEditingPlanTitle(false)
@@ -248,7 +269,10 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
               </div>
             </div>
             <div className="lab-director-actions">
-              <DirectorPlanDeleteControl plan={activePlan} onDeleted={handlePlanDeleted}
+              <DirectorPlanDeleteControl plan={activePlan} onDeleted={(plan) => {
+                handlePlanDeleted(plan)
+                if (selectedPlanId === plan.id) onSelectPlan?.(null)
+              }}
                 disabled={downloading != null || savingPlanTitle || syncStatus === 'syncing'} />
               {activePlan.local_directory && (
                 <IconButton
@@ -284,6 +308,13 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
               >
                 AI 提示词
               </Button>
+              {onCreateEditFromPlan && <Button
+                variant="primary"
+                size="compact"
+                icon={<Scissors size={14} />}
+                disabled={downloading != null}
+                onClick={() => onCreateEditFromPlan(activePlan)}
+              >剪辑此计划</Button>}
               {activePlan.update_available && (
                 <span className="lab-update-badge">
                   <FolderSync size={13} /> 本地副本待更新
@@ -348,6 +379,7 @@ export function DirectorLabView({ active }: DirectorLabViewProps) {
       <DirectorPlanImportDialog open={importOpen} targetPlan={activePlan} onOpenChange={setImportOpen} onImported={(plan) => {
         handleLocalPlanChange(plan)
         setActivePlanId(plan.id)
+        onSelectPlan?.(plan.id)
         setShotQuery('')
         setShotSort('order')
         setEditingPlanTitle(false)

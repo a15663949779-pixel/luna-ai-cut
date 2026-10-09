@@ -3,7 +3,8 @@ import type { DirectorLanPlanSummary, DirectorMaterialSyncProgress } from '../sh
 import { toast } from '../ui/toast'
 
 export function useDirectorMaterialSync(active: boolean, enabled: boolean, endpoint: string | null,
-  refresh: (plans: DirectorLanPlanSummary[]) => void) {
+  refresh: (plans: DirectorLanPlanSummary[]) => void,
+  ensureRemotePlans: (planIds: string[]) => Promise<Set<string>>) {
   const running = useRef(false)
   const [progress, setProgress] = useState<DirectorMaterialSyncProgress[]>([])
   useEffect(() => {
@@ -35,9 +36,13 @@ export function useDirectorMaterialSync(active: boolean, enabled: boolean, endpo
         const plans = await window.luna.directorLab.listLocalPlans()
         if (!disposed) refresh(plans)
         if (enabled && endpoint) {
+          const remotePlanIds = plans.length
+            ? await ensureRemotePlans(plans.map((plan) => plan.id))
+            : new Set<string>()
           let failed = false
           for (const plan of plans) {
             if (disposed) break
+            if (!remotePlanIds.has(plan.id)) continue
             const operationId = crypto.randomUUID()
             operations.set(plan.id, operationId)
             try {
@@ -59,6 +64,6 @@ export function useDirectorMaterialSync(active: boolean, enabled: boolean, endpo
     const onFocus = () => void synchronize().catch(() => undefined)
     window.addEventListener('focus', onFocus)
     return () => { disposed = true; unsubscribe(); window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
-  }, [active, enabled, endpoint, refresh])
+  }, [active, enabled, endpoint, ensureRemotePlans, refresh])
   return progress
 }

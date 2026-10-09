@@ -61,6 +61,8 @@ export interface EditProjectSummary {
   updatedAt: string
   revision: number
   clipCount: number
+  sourceCount?: number
+  directorPlanId?: string | null
 }
 
 export type FootageDecision = 'undecided' | 'liked' | 'rejected'

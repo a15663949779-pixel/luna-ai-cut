@@ -25,6 +25,7 @@ import { registerDirectorThumbnail } from '../features/director-lab/directorLabT
 import { persistDirectorDownloads } from '../features/director-lab/directorLabDownloadStorage'
 import { fileExists, listLocalDirectorPlans } from '../features/director-lab/directorLabPlanReader'
 import {
+  directorPlanDirectoryForId,
   mediaFileName,
   mediaFolder,
   planDirectory,
@@ -108,10 +109,8 @@ async function downloadPlan(
   const { plan, operationId = `plan-${Date.now()}`, metadata = {} } = validateDownloadPlanRequest(value)
   const settings = await getSettings()
   const local = (await listLocalPlans()).find((item) => item.id === plan.id)
-  const directory = local?.local_directory ?? path.join(
-    getDirectorPlanDir(settings),
-    `${planDirectory(plan.title)}_${safePathPart(plan.id, 'plan')}`,
-  )
+  const directory = local?.local_directory
+    ?? await directorPlanDirectoryForId(getDirectorPlanDir(settings), plan.id)
   await fs.mkdir(directory, { recursive: true })
   const media = plan.shots.flatMap((shot) => shot.takes
     .map((take, index) => ({ shot, take, index }))
@@ -429,8 +428,9 @@ export function register(): void {
     const settings = await getSettings()
     const fileName = safePathPart(request.fileName, 'director-media')
     const local = request.plan ? (await listLocalPlans()).find((item) => item.id === request.plan!.id) : null
-    const planPath = local?.local_directory ?? path.join(getDirectorPlanDir(settings), request.plan
-      ? `${planDirectory(request.planTitle)}_${safePathPart(request.plan.id, 'plan')}` : planDirectory(request.planTitle))
+    const planPath = local?.local_directory ?? (request.plan
+      ? await directorPlanDirectoryForId(getDirectorPlanDir(settings), request.plan.id)
+      : path.join(getDirectorPlanDir(settings), planDirectory(request.planTitle)))
     const planEntry = request.plan && request.takeId
       ? request.plan.shots.flatMap((shot) => shot.takes.map((take, index) => ({ shot, take, index })))
         .find((entry) => entry.take.id === request.takeId)

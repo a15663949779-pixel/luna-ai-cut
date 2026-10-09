@@ -106,10 +106,14 @@ function previewLayers(
   return result
 }
 
-export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
+export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProjectsChange,
+  projectIndexOnly = false, refreshKey }: {
   active: boolean
   projectId: string | null
   onProjectIdChange(projectId: string | null): void
+  onProjectsChange?(projects: EditProjectSummary[]): void
+  projectIndexOnly?: boolean
+  refreshKey?: number
 }): JSX.Element {
   const [projects, setProjects] = useState<EditProjectSummary[]>([])
   const [media, setMedia] = useState<AiEditorLocalMedia[]>([])
@@ -130,6 +134,8 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
   const playheadRef = useRef(0)
   const syncingProjectIdsRef = useRef(new Set<string>())
   const syncingRemoteProjectsRef = useRef(false)
+
+  useEffect(() => onProjectsChange?.(projects), [onProjectsChange, projects])
 
   function setPlayhead(milliseconds: number): void {
     playheadRef.current = milliseconds
@@ -155,17 +161,18 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
   const layers = useMemo(() => project ? previewLayers(project, filters, watermarks, playheadMs) : [], [filters, playheadMs, project, watermarks])
 
   const refresh = useCallback(async () => {
-    const [listedProjects, listedMedia, listedFilters, listedWatermarks] = await Promise.all([
-      window.luna.aiEditor.project.list(),
+    const listedProjects = await window.luna.aiEditor.project.list()
+    setProjects(listedProjects)
+    if (projectIndexOnly) return
+    const [listedMedia, listedFilters, listedWatermarks] = await Promise.all([
       window.luna.aiEditor.listLocalMedia({ limit: 500 }),
       window.luna.aiEditor.listFilters(),
       window.luna.aiEditor.listWatermarks(),
     ])
-    setProjects(listedProjects)
     setMedia(listedMedia)
     setFilters(listedFilters)
     setWatermarks(listedWatermarks)
-  }, [])
+  }, [projectIndexOnly])
 
   const syncProjectToPhone = useCallback(async (localProject: LunaEditProject): Promise<void> => {
     const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
@@ -355,7 +362,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
     void refresh()
       .then(syncLocalProjectsToPhone)
       .catch(value => setError(value instanceof Error ? value.message : '工作区读取失败'))
-  }, [active, refresh, syncLocalProjectsToPhone])
+  }, [active, refresh, refreshKey, syncLocalProjectsToPhone])
 
   const loadProject = useCallback(async (id: string) => {
     if (!id) {

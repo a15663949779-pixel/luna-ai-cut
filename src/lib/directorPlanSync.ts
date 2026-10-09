@@ -1,4 +1,4 @@
-import type { DirectorLanPlanSummary } from '../shared/types'
+import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
 import { normalizeDirectorShotFields } from './directorShotFields.ts'
 import { validateDirectorTakeMarkers } from './directorTakeMarkers.ts'
 
@@ -90,9 +90,10 @@ export function buildDirectorPlanUpdate(
   plan: DirectorLanPlanSummary,
   expectedRevision: number,
   includeTakeRanges = true,
+  schema?: DirectorPlanSchema | null,
 ) {
   const shots = plan.shots.map((shot) => {
-    const fields = normalizeDirectorShotFields(shot)
+    const fields = normalizeDirectorShotFields(shot, schema)
     if (fields.remark.length > 4000 || fields.attributes.some((field) => field.description.length > 4000 || field.id.length > 128)) {
       throw new Error('镜头内容超过手机接口限制（invalid-plan-update）')
     }
@@ -143,6 +144,12 @@ export function overlayDirectorLocalPlan(remote: DirectorLanPlanSummary, local: 
     return { ...shot, takes: visibleTakes, completed_takes: visibleTakes.filter((take) => take.available).length }
   })
   return { ...base, shots, source: local.pending_create ? 'local' : 'remote',
+    kind: remote.kind ?? base.kind,
+    rough_cut: remote.rough_cut ?? base.rough_cut,
+    rough_cut_bpm: remote.rough_cut_bpm ?? base.rough_cut_bpm,
+    rough_cut_music_enabled: remote.rough_cut_music_enabled ?? base.rough_cut_music_enabled,
+    rough_cut_takes: remote.rough_cut_takes ?? base.rough_cut_takes,
+    rough_cut_ranges: remote.rough_cut_ranges ?? base.rough_cut_ranges,
     local_directory: local.local_directory, pending_create: local.pending_create,
     local_updated_at: local.updated_at,
     local_content_signature: local.local_content_signature ?? directorPlanContentSignature(local),

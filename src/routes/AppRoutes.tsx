@@ -17,8 +17,7 @@ import { DeviceDebugPage } from '../pages/DeviceDebugPage'
 import { DeviceConnectPage } from '../pages/DeviceConnectPage'
 import { LocalMediaPage } from '../pages/LocalMediaPage'
 import { AiSelectionPage } from '../pages/AiSelectionPage'
-import { AiShootingPage } from '../pages/AiShootingPage'
-import { AiEditorPage } from '../pages/AiEditorPage'
+import { ProjectsPage } from '../pages/ProjectsPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
 import { LiveConsolePage } from '../pages/LiveConsolePage'
@@ -110,8 +109,7 @@ export function AppRoutes() {
     ['/library', true],
     ['/local-resources', true],
     ['/ai-selection', true],
-    ['/ai-shooting', true],
-    ['/ai-editor', true],
+    ['/projects', true],
     ['/workspace', true],
     ['/live-console', true],
     ['/settings', true],
@@ -139,8 +137,8 @@ export function AppRoutes() {
   }, [activePath, isKnownRoute, location.pathname, settingsRoute])
 
   // ── 特殊处理 ──
-  if (location.pathname === '/lab' || location.pathname === '/ai-director') {
-    return <Navigate to="/ai-shooting" replace />
+  if (['/lab', '/ai-director', '/ai-shooting', '/ai-editor'].includes(location.pathname)) {
+    return <Navigate to="/projects" replace state={location.state} />
   }
   if (location.pathname === '/') return <Navigate to="/library" replace />
   if (isActive('/downloads')) return <Navigate to="/local-resources" replace />
@@ -204,12 +202,8 @@ export function AppRoutes() {
           <AiSelectionPage />
         </AppRoute>
 
-        <AppRoute path="/ai-shooting" preserve>
-          <AiShootingPage active={isActive('/ai-shooting')} />
-        </AppRoute>
-
-        <AppRoute path="/ai-editor" preserve>
-          <AiEditorPage active={isActive('/ai-editor')} />
+        <AppRoute path="/projects" preserve>
+          <ProjectsPage active={isActive('/projects')} />
         </AppRoute>
 
         <AppRoute path="/workspace">

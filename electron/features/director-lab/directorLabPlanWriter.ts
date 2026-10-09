@@ -2,7 +2,11 @@ import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { DirectorLanPlanSummary } from '../../../src/shared/types/directorLab.ts'
 import { directorPlanContentSignature } from '../../../src/lib/directorPlanSync.ts'
-import { planDirectory, serializePlanWrite, writeDirectorPlanFilesUnlocked } from './directorLabPlanStorage.ts'
+import {
+  directorPlanDirectoryForId,
+  serializePlanWrite,
+  writeDirectorPlanFilesUnlocked,
+} from './directorLabPlanStorage.ts'
 
 export function createDirectorPlanWriter(listPlans: () => Promise<DirectorLanPlanSummary[]>, getRoot: () => Promise<string>) {
   return async function save(plan: DirectorLanPlanSummary, modify: (current: DirectorLanPlanSummary) => DirectorLanPlanSummary,
@@ -19,7 +23,8 @@ export function createDirectorPlanWriter(listPlans: () => Promise<DirectorLanPla
         shots: plan.shots.map((shot) => ({ ...shot, takes: shot.takes.map((take) => ({ ...take, available: false })) })) }
       const next = modify(current)
       const root = await getRoot()
-      const directory = existing?.local_directory ?? path.join(root, `${planDirectory(plan.title)}_${plan.id}`)
+      const directory = existing?.local_directory
+        ?? await directorPlanDirectoryForId(root, plan.id)
       if (!existing) {
         const entry = await fs.lstat(directory).catch(error => {
           if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null

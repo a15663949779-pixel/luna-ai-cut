@@ -14,8 +14,9 @@ export function useDirectorLab(active: boolean) {
   const [schema, setSchema] = useState<DirectorPlanSchema>({ schema_version: 2, shot_fields: [
     { id: 'content', label: '画面内容', storage_name: '画面内容', kind: 'multiline', max_length: 4000 },
     { id: 'framing', label: '景别', storage_name: '景别', kind: 'text', max_length: 4000 },
-    { id: 'movement', label: '运镜方式', storage_name: '运镜方式', kind: 'multiline', max_length: 4000 },
+    { id: 'movement', label: '运镜参考', storage_name: '运镜参考', kind: 'multiline', max_length: 4000 },
   ] })
+  const schemaRef = useRef(schema)
   const [importOpen, setImportOpen] = useState(false)
   const [plans, setPlans] = useState<DirectorLanPlanSummary[]>([])
   const [activePlanId, setActivePlanId] = useState<string | null>(null)
@@ -109,6 +110,7 @@ export function useDirectorLab(active: boolean) {
       requestPlans(connectedEndpoint),
       requestSchema(connectedEndpoint),
     ])
+    schemaRef.current = definitions
     setSchema(definitions)
     const remotePlans = payload.plans.map((plan) => ({
       ...plan, remote_origin: new URL(connectedEndpoint).origin,
@@ -121,6 +123,7 @@ export function useDirectorLab(active: boolean) {
     if (pending) pendingWritePlanIdsRef.current.add(planId)
     else pendingWritePlanIdsRef.current.delete(planId)
   }, [])
+  const getPlanSchema = useCallback((): DirectorPlanSchema => schemaRef.current, [])
 
   const isPlanWritePending = useCallback((planId: string): boolean =>
     pendingWritePlanIdsRef.current.has(planId), [])
@@ -160,7 +163,6 @@ export function useDirectorLab(active: boolean) {
   }, [connectedEndpoint])
 
   const [conflictsOpen, setConflictsOpen] = useState(false)
-  const materialSyncControl = useDirectorMaterialSyncControl(active, connectedEndpoint, mergeLocalPlanCopies)
   const { status: syncStatus, synchronize, retrySynchronization, writeFailures, conflicts, resolvingPlanId, resolveConflict } = useDirectorPlanSync({
     enabled: active,
     endpoint: connectedEndpoint,
@@ -169,8 +171,17 @@ export function useDirectorLab(active: boolean) {
     mergeLocalPlans: mergeLocalPlanCopies,
     isPlanWritePending,
     setPlanWritePending,
+    getPlanSchema,
     onConflict: handleSyncConflict,
   })
+  const ensureRemotePlans = useCallback(async (planIds: string[]): Promise<Set<string>> => {
+    await synchronize()
+    const remotePlans = await refreshRemotePlans()
+    const requestedIds = new Set(planIds)
+    return new Set(remotePlans.filter((plan) => requestedIds.has(plan.id)).map((plan) => plan.id))
+  }, [refreshRemotePlans, synchronize])
+  const materialSyncControl = useDirectorMaterialSyncControl(active, connectedEndpoint,
+    mergeLocalPlanCopies, ensureRemotePlans)
 
   function handleLocalPlanChange(plan: DirectorLanPlanSummary): void {
     setPlans((current) => {
@@ -295,6 +306,7 @@ export function useDirectorLab(active: boolean) {
       const [payload, definitions] = await Promise.all([
         requestPlans(normalized), requestSchema(normalized),
       ])
+      schemaRef.current = definitions
       setSchema(definitions)
       mergePlans(payload.plans)
       setConnectedEndpoint(normalized)

@@ -230,7 +230,8 @@ async function withProjectOperation<T>(baseDir: string, projectId: string, opera
 
 function summary(project: LunaEditProject): EditProjectSummary {
   return { projectId: project.id, projectName: project.name, createdAt: project.createdAt,
-    updatedAt: project.updatedAt, revision: project.revision, clipCount: project.clips.length }
+    updatedAt: project.updatedAt, revision: project.revision, clipCount: project.clips.length,
+    sourceCount: project.sources.length, directorPlanId: project.directorPlanId }
 }
 
 function validateProjectUpdate(incoming: LunaEditProject, saved: LunaEditProject): LunaEditProject {

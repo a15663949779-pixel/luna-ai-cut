@@ -117,7 +117,27 @@ export interface DirectorLabApi {
 export interface DirectorLanPlanSummary {
   id: string
   title: string
+  /** App project tab kind. Older phone builds may omit it. */
+  kind?: 'shooting' | 'footage'
   main_content?: string
+  rough_cut?: {
+    version: number
+    music?: { template_id?: string; score?: { bpm?: number } }
+    clips: Array<{
+      clip_id?: string
+      source_ref?: string
+      source_start_ms?: number
+      source_end_ms?: number
+      shot_ref: string
+      from_beat: number
+      to_beat: number
+      source_anchor?: 'start' | 'center' | 'end'
+    }>
+  } | null
+  rough_cut_bpm?: number
+  rough_cut_music_enabled?: boolean
+  rough_cut_takes?: Record<string, string>
+  rough_cut_ranges?: Record<string, { take_id: string; start_ms: number; end_ms?: number }>
   created_at: string
   updated_at: string
   revision?: number

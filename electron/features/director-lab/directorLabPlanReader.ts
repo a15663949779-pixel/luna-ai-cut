@@ -50,8 +50,14 @@ interface LocalManifest {
   format?: unknown
   plan_id?: unknown
   title?: unknown
+  kind?: unknown
   created_at?: unknown
   updated_at?: unknown
+  rough_cut?: unknown
+  rough_cut_bpm?: unknown
+  rough_cut_music_enabled?: unknown
+  rough_cut_takes?: unknown
+  rough_cut_ranges?: unknown
   revision?: unknown
   synced_revision?: unknown
   synced_signature?: unknown
@@ -247,7 +253,18 @@ async function localPlanFromManifest(manifestPath: string, probeMediaOne?: (requ
     return {
       id: raw.plan_id,
       title: typeof raw.title === 'string' ? raw.title : path.basename(directory),
+      ...(raw.kind === 'shooting' || raw.kind === 'footage' ? { kind: raw.kind } : {}),
       main_content: typeof raw.main_content === 'string' ? raw.main_content : '',
+      ...(raw.rough_cut && typeof raw.rough_cut === 'object' && !Array.isArray(raw.rough_cut)
+        ? { rough_cut: raw.rough_cut as NonNullable<DirectorLabDownloadPlanRequest['plan']['rough_cut']> } : {}),
+      ...(typeof raw.rough_cut_bpm === 'number' && Number.isFinite(raw.rough_cut_bpm) && raw.rough_cut_bpm > 0
+        ? { rough_cut_bpm: raw.rough_cut_bpm } : {}),
+      ...(typeof raw.rough_cut_music_enabled === 'boolean'
+        ? { rough_cut_music_enabled: raw.rough_cut_music_enabled } : {}),
+      ...(raw.rough_cut_takes && typeof raw.rough_cut_takes === 'object' && !Array.isArray(raw.rough_cut_takes)
+        ? { rough_cut_takes: raw.rough_cut_takes as Record<string, string> } : {}),
+      ...(raw.rough_cut_ranges && typeof raw.rough_cut_ranges === 'object' && !Array.isArray(raw.rough_cut_ranges)
+        ? { rough_cut_ranges: raw.rough_cut_ranges as Record<string, { take_id: string; start_ms: number; end_ms?: number }> } : {}),
       created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date(0).toISOString(),
       updated_at: typeof raw.updated_at === 'string'
         ? raw.updated_at

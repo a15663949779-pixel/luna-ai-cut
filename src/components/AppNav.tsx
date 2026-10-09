@@ -48,11 +48,8 @@ export function AppNav({ activeDevice, connection, sourceMode, onChangeConnectio
           <NavLink to="/ai-selection" className={({ isActive }) => (isActive ? 'active' : '')}>
             AI 选片
           </NavLink>
-          <NavLink to="/ai-shooting" className={({ isActive }) => (isActive ? 'active' : '')}>
-            拍摄计划
-          </NavLink>
-          <NavLink to="/ai-editor" state={{ projectId: null }} className={({ isActive }) => (isActive ? 'active' : '')}>
-            AI 剪辑
+          <NavLink to="/projects" className={({ isActive }) => (isActive ? 'active' : '')}>
+            项目
           </NavLink>
           <NavLink to="/workspace" className={({ isActive }) => (isActive ? 'active' : '')}>
             工作台
