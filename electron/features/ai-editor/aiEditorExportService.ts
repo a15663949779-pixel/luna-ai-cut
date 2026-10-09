@@ -315,6 +315,14 @@ export async function exportAiEditorProject(baseDir: string, projectId: string, 
   if (!path.isAbsolute(outputPath) || path.extname(outputPath).toLowerCase() !== '.mp4') throw new Error('导出位置无效')
   const { project } = await loadAiEditorProject(baseDir, projectId)
   if (!project.clips.length) throw new Error('时间线没有可导出的片段')
+  const usedSourceIds = new Set(project.clips.map(clip => clip.sourceId))
+  if (project.music) usedSourceIds.add(project.music.sourceId)
+  const sourcesById = new Map(project.sources.map(source => [source.id, source]))
+  const missingSources = [...usedSourceIds].filter(sourceId => {
+    const source = sourcesById.get(sourceId)
+    return !source || source.available === false || !source.path
+  }).map(sourceId => sourcesById.get(sourceId)?.name ?? sourceId)
+  if (missingSources.length) throw new Error(`工程素材尚未关联：${missingSources.join('、')}`)
   const output = path.resolve(outputPath)
   const sourcePaths = project.sources.map(source => path.resolve(source.path))
   if (sourcePaths.includes(output)) throw new Error('不能覆盖工程原素材')

@@ -54,9 +54,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
       preload: options.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      // Chromium removes WebCodecs and WebGPU globals when web security is
-      // disabled, even for the trusted local editor document.
-      webSecurity: true,
+      webSecurity: false,
     },
   })
 

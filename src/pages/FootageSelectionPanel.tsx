@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Heart, MessageSquare, Plus, Save, Scissors, Tag } from 'lucide-react'
+import { Film, Heart, MessageSquare, Plus, Save, Scissors, Tag } from 'lucide-react'
 
 import type { AiEditorLocalMedia } from '../shared/types/aiEditor'
 import type { FootageSelectionItem, FootageSelectionProject, FootageSelectionProjectSummary } from '../shared/types/aiEditing'
@@ -15,7 +15,7 @@ function clock(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-export function FootageSelectionPanel({ active }: { active: boolean }): JSX.Element {
+export function FootageSelectionPanel({ active, projectId }: { active: boolean; projectId?: string | null }): JSX.Element {
   const [media, setMedia] = useState<AiEditorLocalMedia[]>([])
   const [projects, setProjects] = useState<FootageSelectionProjectSummary[]>([])
   const [project, setProject] = useState<FootageSelectionProject | null>(null)
@@ -61,7 +61,7 @@ export function FootageSelectionPanel({ active }: { active: boolean }): JSX.Elem
     return () => { cancelled = true }
   }, [active, selectedMediaId])
 
-  async function openProject(id: string): Promise<void> {
+  const openProject = useCallback(async (id: string): Promise<void> => {
     if (!id) { setProject(null); setSelectedMediaId(''); return }
     setBusy(true)
     try {
@@ -73,7 +73,11 @@ export function FootageSelectionPanel({ active }: { active: boolean }): JSX.Elem
     } catch (value) {
       setError(value instanceof Error ? value.message : '标注项目读取失败')
     } finally { setBusy(false) }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (active && projectId) void openProject(projectId)
+  }, [active, openProject, projectId])
 
   async function createProject(): Promise<void> {
     if (selectedIds.size === 0) { setError('先从左侧选择素材'); return }
@@ -189,7 +193,15 @@ export function FootageSelectionPanel({ active }: { active: boolean }): JSX.Elem
     </aside>
 
     <div className="footage-review">
-      {!project ? <div className="footage-empty-state">选择素材后创建标注项目</div> : !activeItem || !selectedMedia ? <div className="footage-empty-state">项目里还没有素材</div> : <>
+      {!project ? <div className="footage-empty-state">
+        <span className="footage-empty-icon"><Film size={19} /></span>
+        <strong>选择素材开始点评</strong>
+        <small>在左侧勾选照片或视频，再新建项目</small>
+      </div> : !activeItem || !selectedMedia ? <div className="footage-empty-state">
+        <span className="footage-empty-icon"><Film size={19} /></span>
+        <strong>项目里还没有素材</strong>
+        <small>在左侧选择素材并加入项目</small>
+      </div> : <>
         <div className="footage-preview">
           {previewPath && selectedMedia.kind === 'video'
             ? <video src={filePathToPreviewUrl(previewPath) ?? undefined} controls onTimeUpdate={event => setPlayheadMs(event.currentTarget.currentTime * 1000)} />

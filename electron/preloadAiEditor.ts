@@ -17,6 +17,7 @@ export const aiEditorApi: AiEditorFileApi = {
     create: name => ipcRenderer.invoke('ai-editor:create-project', name),
     load: projectId => ipcRenderer.invoke('ai-editor:load-project', projectId),
     save: (project, expectedRevision, taskId) => ipcRenderer.invoke('ai-editor:save-project', project, expectedRevision, taskId),
+    importSynced: (project, expectedLocalRevision) => ipcRenderer.invoke('ai-editor:import-synced-project', project, expectedLocalRevision),
     delete: projectId => ipcRenderer.invoke('ai-editor:delete-project', projectId),
     rename: (projectId, name) => ipcRenderer.invoke('ai-editor:rename-project', projectId, name),
     addMedia: (projectId, mediaIds) => ipcRenderer.invoke('ai-editor:add-media', projectId, mediaIds),

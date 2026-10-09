@@ -1,4 +1,5 @@
 import type { RenderColorAdjustments, WatermarkPositioning } from './render'
+import type { LunaEditWireProject } from './lunaEditingSync'
 
 export type EditSourceKind = 'video' | 'image' | 'audio'
 
@@ -8,6 +9,10 @@ export interface EditProjectSource {
   name: string
   kind: EditSourceKind
   path: string
+  /** False when a synchronized reference has no matching local media yet. */
+  available?: boolean
+  /** Original portable ID when this source was resolved through a local alias. */
+  syncMediaId?: string
   durationMs: number | null
   width: number | null
   height: number | null
@@ -44,6 +49,8 @@ export interface LunaEditProject {
   musicEnabled?: boolean
   filter?: { id: string; intensity: number; enabled: boolean } | null
   watermark?: { id: string; width: number; opacity: number; positioning: WatermarkPositioning & { centerX?: number; centerY?: number } } | null
+  /** Unknown fields from the shared document stay intact across PC saves. */
+  syncExtensions?: Record<string, unknown>
   aiUndo?: Array<{ taskId: string; before: Omit<LunaEditProject, 'aiUndo'>; afterRevision: number }>
 }
 
@@ -117,6 +124,7 @@ export interface AiEditorProjectApi {
   delete(projectId: string): Promise<void>
   rename(projectId: string, name: string): Promise<EditProjectSummary>
   addMedia(projectId: string, mediaIds: string[]): Promise<LunaEditProject>
+  importSynced(project: LunaEditWireProject, expectedLocalRevision?: number): Promise<LunaEditProject>
 }
 
 export interface FootageSelectionProjectApi {

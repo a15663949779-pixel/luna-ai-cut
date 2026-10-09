@@ -17,11 +17,11 @@ import { DeviceDebugPage } from '../pages/DeviceDebugPage'
 import { DeviceConnectPage } from '../pages/DeviceConnectPage'
 import { LocalMediaPage } from '../pages/LocalMediaPage'
 import { AiSelectionPage } from '../pages/AiSelectionPage'
+import { AiShootingPage } from '../pages/AiShootingPage'
 import { AiEditorPage } from '../pages/AiEditorPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
 import { LiveConsolePage } from '../pages/LiveConsolePage'
-import { AiDirectorPage } from '../pages/AiDirectorPage'
 import { logger } from '../lib/rendererLogger'
 import type { CacheStats } from '../shared/types'
 import type { CreativeModeId } from '../workspace/creative/creativeCatalog'
@@ -110,9 +110,9 @@ export function AppRoutes() {
     ['/library', true],
     ['/local-resources', true],
     ['/ai-selection', true],
+    ['/ai-shooting', true],
     ['/ai-editor', true],
     ['/workspace', true],
-    ['/ai-director', true],
     ['/live-console', true],
     ['/settings', true],
     ['/developer', developerMode],
@@ -139,7 +139,9 @@ export function AppRoutes() {
   }, [activePath, isKnownRoute, location.pathname, settingsRoute])
 
   // ── 特殊处理 ──
-  if (location.pathname === '/lab') return <Navigate to="/ai-director" replace />
+  if (location.pathname === '/lab' || location.pathname === '/ai-director') {
+    return <Navigate to="/ai-shooting" replace />
+  }
   if (location.pathname === '/') return <Navigate to="/library" replace />
   if (isActive('/downloads')) return <Navigate to="/local-resources" replace />
   if (!isKnownRoute) return <Navigate to={developerMode ? '/developer' : '/library'} replace />
@@ -202,6 +204,10 @@ export function AppRoutes() {
           <AiSelectionPage />
         </AppRoute>
 
+        <AppRoute path="/ai-shooting" preserve>
+          <AiShootingPage active={isActive('/ai-shooting')} />
+        </AppRoute>
+
         <AppRoute path="/ai-editor" preserve>
           <AiEditorPage active={isActive('/ai-editor')} />
         </AppRoute>
@@ -212,10 +218,6 @@ export function AppRoutes() {
             onCreativeModeChange={setCreativeModeId}
             pageActive={isActive('/workspace')}
           />
-        </AppRoute>
-
-        <AppRoute path="/ai-director">
-          <AiDirectorPage pageActive={isActive('/ai-director')} />
         </AppRoute>
 
         <AppRoute path="/live-console" preserve={false}>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Download, Music2, Pause, Play, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Download, Film, Music2, Pause, Play, Plus, Save, Trash2 } from 'lucide-react'
 
 import type { AiEditorLocalMedia } from '../shared/types/aiEditor'
 import type { EditProjectClip, EditProjectSummary, EditProjectSource, LunaEditProject } from '../shared/types/aiEditing'
+import { toLunaEditWireProject } from '../lib/aiEditingWire'
+import { requestEditingProject, requestEditingProjects, writeEditingProject } from '../lib/editingLanProjects'
 import type { PreviewLayer } from '../shared/types/render'
 import { clipOutputDurationMs, clipSourceOffsetAtOutputMs, orderedTimelineClips } from '../shared/aiEditingTimeline'
 import { LrcRender } from '../components/LrcRender'
@@ -21,6 +23,29 @@ function orderedClips(clips: EditProjectClip[]): EditProjectClip[] {
   return orderedTimelineClips(clips)
 }
 
+type EditingSyncState = 'offline' | 'syncing' | 'synced' | 'conflict' | 'error'
+type EditingSyncBaseline = { revision: number; signature: string }
+const DIRECTOR_ENDPOINT_KEY = 'luna.director-lab.endpoint'
+const EDITING_SYNC_BASELINE_KEY = 'luna.ai-editing.sync-baselines'
+
+function readEditingSyncBaselines(): Record<string, EditingSyncBaseline> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(EDITING_SYNC_BASELINE_KEY) ?? '{}')
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, EditingSyncBaseline> : {}
+  } catch {
+    return {}
+  }
+}
+
+function editingSyncSignature(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(editingSyncSignature).join(',')}]`
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${editingSyncSignature(item)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
 function previewLayers(
   project: LunaEditProject,
   filters: Array<{ id: string; path: string }>,
@@ -37,7 +62,8 @@ function previewLayers(
   const fadeDuration = activeClip ? Math.min(activeClip.fadeOutMs ?? 0, duration / 2) : 0
   const opacity = fadeDuration > 0 && localOutputMs > duration - fadeDuration
     ? Math.max(0, (duration - localOutputMs) / fadeDuration) : 1
-  const result: PreviewLayer[] = source && activeClip && source.kind !== 'audio' ? [{
+  const result: PreviewLayer[] = source && activeClip && source.kind !== 'audio'
+    && source.available !== false && source.path ? [{
     filePath: source.path,
     isVideo: source.kind === 'video',
     videoTime: (activeClip.sourceStartMs + sourceOffset) / 1000,
@@ -93,12 +119,17 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
   const [selectedSourceId, setSelectedSourceId] = useState('')
   const [selectedClipId, setSelectedClipId] = useState('')
   const [projectName, setProjectName] = useState('AI 剪辑')
+  const [mediaSearch, setMediaSearch] = useState('')
+  const [mediaKind, setMediaKind] = useState<'all' | AiEditorLocalMedia['kind']>('all')
   const [busy, setBusy] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
   const [playheadMs, setPlayheadMs] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [syncState, setSyncState] = useState<EditingSyncState>('offline')
   const playheadRef = useRef(0)
+  const syncingProjectIdsRef = useRef(new Set<string>())
+  const syncingRemoteProjectsRef = useRef(false)
 
   function setPlayhead(milliseconds: number): void {
     playheadRef.current = milliseconds
@@ -109,7 +140,18 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
   const currentSource = currentClip ? project?.sources.find(source => source.id === currentClip.sourceId) ?? null : null
   const selectedSource = project?.sources.find(source => source.id === selectedSourceId) ?? null
   const sourceById = useMemo(() => new Map(project?.sources.map(source => [source.id, source]) ?? []), [project?.sources])
+  const visibleMedia = useMemo(() => {
+    const query = mediaSearch.trim().toLocaleLowerCase()
+    return media.filter(item => (mediaKind === 'all' || item.kind === mediaKind)
+      && (!query || item.name.toLocaleLowerCase().includes(query)))
+  }, [media, mediaKind, mediaSearch])
   const totalDurationMs = project?.clips.reduce((sum, clip) => sum + clipDuration(clip), 0) ?? 0
+  const hasMissingClipSource = Boolean(project && project.clips.some(clip => {
+    const source = project.sources.find(item => item.id === clip.sourceId)
+    return !source || source.available === false || !source.path
+  }))
+  const hasMissingMusicSource = Boolean(project?.music && !project.sources.some(source => source.id === project.music?.sourceId
+    && source.available !== false && source.path))
   const layers = useMemo(() => project ? previewLayers(project, filters, watermarks, playheadMs) : [], [filters, playheadMs, project, watermarks])
 
   const refresh = useCallback(async () => {
@@ -125,10 +167,195 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
     setWatermarks(listedWatermarks)
   }, [])
 
+  const syncProjectToPhone = useCallback(async (localProject: LunaEditProject): Promise<void> => {
+    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
+    if (!endpoint) {
+      setSyncState('offline')
+      return
+    }
+    if (syncingProjectIdsRef.current.has(localProject.id)) return
+    syncingProjectIdsRef.current.add(localProject.id)
+    setSyncState('syncing')
+    const wireProject = toLunaEditWireProject(localProject)
+    const signature = editingSyncSignature(wireProject)
+    try {
+      const origin = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `http://${endpoint}`).origin
+      const baselineKey = `${origin}:${localProject.id}`
+      const baselines = readEditingSyncBaselines()
+      const baseline = baselines[baselineKey]
+      if (baseline) {
+        const remote = await requestEditingProject(endpoint, localProject.id)
+        if (remote.deleted_at) {
+          setSyncState('conflict')
+          return
+        }
+        if (remote.revision !== baseline.revision) {
+          if (remote.revision > baseline.revision && editingSyncSignature(remote.project) === signature) {
+            baselines[baselineKey] = { revision: remote.revision, signature }
+            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+            setSyncState('synced')
+            return
+          }
+          setSyncState('conflict')
+          return
+        }
+        if (baseline.signature === signature) {
+          setSyncState('synced')
+          return
+        }
+        try {
+          const saved = await writeEditingProject(endpoint, wireProject, baseline.revision)
+          baselines[baselineKey] = { revision: saved.revision, signature }
+          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          setSyncState('synced')
+          return
+        } catch (error) {
+          const remote = await requestEditingProject(endpoint, localProject.id).catch(() => null)
+          if (remote && remote.revision > baseline.revision) {
+            setSyncState('conflict')
+            toast.error(`“${localProject.name}”手机与电脑都有修改，已保留两端版本`)
+            return
+          }
+          throw error
+        }
+      }
+
+      const index = await requestEditingProjects(endpoint)
+      const existing = index.projects.find(item => item.id === localProject.id)
+      if (existing) {
+        const remote = await requestEditingProject(endpoint, localProject.id)
+        if (!remote.deleted_at && editingSyncSignature(remote.project) === signature) {
+          baselines[baselineKey] = { revision: remote.revision, signature }
+          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          setSyncState('synced')
+          return
+        }
+        setSyncState('conflict')
+        toast.error(`“${localProject.name}”手机已有同 ID 工程，已保留两端版本`)
+        return
+      }
+      const created = await writeEditingProject(endpoint, wireProject, 0)
+      baselines[baselineKey] = { revision: created.revision, signature }
+      localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+      setSyncState('synced')
+    } catch (value) {
+      setSyncState('error')
+      setError(value instanceof Error ? value.message : '剪辑工程同步失败')
+    } finally {
+      syncingProjectIdsRef.current.delete(localProject.id)
+    }
+  }, [])
+
+  const syncRemoteProjectsFromPhone = useCallback(async (): Promise<boolean> => {
+    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
+    if (!endpoint || syncingRemoteProjectsRef.current) return false
+    syncingRemoteProjectsRef.current = true
+    try {
+      const origin = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `http://${endpoint}`).origin
+      const index = await requestEditingProjects(endpoint)
+      let localProjects = await window.luna.aiEditor.project.list()
+      let importedAny = false
+      let foundConflict = false
+      for (const summary of index.projects) {
+        if (summary.deleted) {
+          if (localProjects.some(item => item.projectId === summary.id)) foundConflict = true
+          continue
+        }
+        const remote = await requestEditingProject(endpoint, summary.id)
+        const baselineKey = `${origin}:${summary.id}`
+        const baselines = readEditingSyncBaselines()
+        const baseline = baselines[baselineKey]
+        const existingSummary = localProjects.find(item => item.projectId === summary.id)
+        const remoteSignature = editingSyncSignature(remote.project)
+        const mobileState = remote.project.extensions?.['com.luna.mobile']
+        const hasPendingPhoneVersion = Boolean(mobileState && typeof mobileState === 'object'
+          && !Array.isArray(mobileState)
+          && ('pending_native_project' in mobileState || 'pending_native_apply_error_revision' in mobileState))
+        if (hasPendingPhoneVersion && existingSummary) {
+          foundConflict = true
+          continue
+        }
+        if (hasPendingPhoneVersion) foundConflict = true
+        if (!existingSummary) {
+          const imported = await window.luna.aiEditor.project.importSynced(remote.project)
+          const localSignature = editingSyncSignature(toLunaEditWireProject(imported))
+          baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
+          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          localProjects = [...localProjects, { projectId: imported.id, projectName: imported.name,
+            createdAt: imported.createdAt, updatedAt: imported.updatedAt, revision: imported.revision,
+            clipCount: imported.clips.length }]
+          importedAny = true
+          continue
+        }
+
+        const { project: localProject } = await window.luna.aiEditor.project.load(summary.id)
+        const localSignature = editingSyncSignature(toLunaEditWireProject(localProject))
+        if (!baseline) {
+          if (localSignature === remoteSignature) {
+            baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
+            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          } else {
+            foundConflict = true
+          }
+          continue
+        }
+        if (remote.revision <= baseline.revision || localSignature === remoteSignature) {
+          if (localSignature === remoteSignature && remote.revision > baseline.revision) {
+            baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
+            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          }
+          continue
+        }
+        if (remoteSignature === baseline.signature) {
+          baselines[baselineKey] = { revision: remote.revision, signature: baseline.signature }
+          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          continue
+        }
+        const activeUnsaved = project?.id === summary.id && dirty
+        if (localSignature === baseline.signature && !activeUnsaved) {
+          const imported = await window.luna.aiEditor.project.importSynced(remote.project, localProject.revision)
+          const importedSignature = editingSyncSignature(toLunaEditWireProject(imported))
+          baselines[baselineKey] = { revision: remote.revision, signature: importedSignature }
+          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
+          if (project?.id === summary.id) {
+            setProject(imported)
+            setSelectedClipId(imported.clips[0]?.id ?? '')
+            setDirty(false)
+          }
+          importedAny = true
+        } else if (remoteSignature !== baseline.signature) {
+          foundConflict = true
+        }
+      }
+      if (importedAny) await refresh()
+      setSyncState(foundConflict ? 'conflict' : 'synced')
+      return foundConflict
+    } catch (value) {
+      setSyncState('error')
+      setError(value instanceof Error ? value.message : '剪辑工程同步失败')
+      return false
+    } finally {
+      syncingRemoteProjectsRef.current = false
+    }
+  }, [dirty, project, refresh])
+
+  const syncLocalProjectsToPhone = useCallback(async (): Promise<void> => {
+    if (!localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()) return
+    const foundConflict = await syncRemoteProjectsFromPhone()
+    const localProjects = await window.luna.aiEditor.project.list()
+    for (const summary of localProjects) {
+      const { project: localProject } = await window.luna.aiEditor.project.load(summary.projectId)
+      await syncProjectToPhone(localProject)
+    }
+    if (foundConflict) setSyncState('conflict')
+  }, [syncProjectToPhone, syncRemoteProjectsFromPhone])
+
   useEffect(() => {
     if (!active) return
-    void refresh().catch(value => setError(value instanceof Error ? value.message : '工作区读取失败'))
-  }, [active, refresh])
+    void refresh()
+      .then(syncLocalProjectsToPhone)
+      .catch(value => setError(value instanceof Error ? value.message : '工作区读取失败'))
+  }, [active, refresh, syncLocalProjectsToPhone])
 
   const loadProject = useCallback(async (id: string) => {
     if (!id) {
@@ -147,15 +374,24 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
       onProjectIdChange(id)
       setDirty(false)
       setError('')
+      void syncProjectToPhone(loaded.project)
     } catch (value) {
       setError(value instanceof Error ? value.message : '剪辑工程读取失败')
     } finally { setBusy(false) }
-  }, [onProjectIdChange])
+  }, [onProjectIdChange, syncProjectToPhone])
 
   useEffect(() => {
     if (!active || !projectId) return
     void loadProject(projectId)
   }, [active, loadProject, projectId])
+
+  useEffect(() => {
+    if (!active || !project || dirty) return
+    const timer = window.setInterval(() => {
+      void syncLocalProjectsToPhone().catch(() => undefined)
+    }, 5_000)
+    return () => window.clearInterval(timer)
+  }, [active, dirty, project, syncLocalProjectsToPhone])
 
   useEffect(() => {
     if (!playing || totalDurationMs <= 0) return
@@ -186,6 +422,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
       onProjectIdChange(created.projectId)
       setDirty(false)
       await refresh()
+      void syncProjectToPhone(loaded.project)
     } catch (value) {
       setError(value instanceof Error ? value.message : '剪辑工程创建失败')
     } finally { setBusy(false) }
@@ -200,6 +437,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
       setSelectedSourceId(updated.sources.find(source => source.mediaId === mediaId)?.id ?? '')
       setDirty(false)
       setError('')
+      void syncProjectToPhone(updated)
     } catch (value) {
       setError(value instanceof Error ? value.message : '素材加入工程失败')
     } finally { setBusy(false) }
@@ -233,6 +471,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
       setDirty(false)
       setError('')
       await refresh()
+      await syncProjectToPhone(saved)
       toast.success('剪辑工程已保存')
     } catch (value) {
       setError(value instanceof Error ? value.message : '剪辑工程保存失败')
@@ -259,6 +498,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
         setProject(current)
         setDirty(false)
       }
+      if (current !== project) await syncProjectToPhone(current)
       const outputPath = await window.luna.aiEditor.exportProject(current.id)
       if (!outputPath) return
       toast.success('视频已导出')
@@ -303,26 +543,68 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
         onValueChange={id => void loadProject(id === 'none' ? '' : id)} />
       <input value={projectName} aria-label="新剪辑工程名称" onChange={event => setProjectName(event.target.value)} />
       <Button size="compact" disabled={busy || Boolean(project)} icon={<Plus size={14} />} onClick={() => void createProject()}>新建工程</Button>
-      <span>{project ? `版本 ${project.revision}${dirty ? ' · 未保存' : ''}` : '选择或新建工程'}</span>
+      <span>{project ? `版本 ${project.revision}${dirty ? ' · 未保存' : ''}` : '选择或新建工程'}{project ? ` · ${syncState === 'syncing' ? '同步中' : syncState === 'synced' ? '已同步' : syncState === 'conflict' ? '两端冲突' : syncState === 'error' ? '同步失败' : '未连接手机'}` : ''}</span>
       <Button size="compact" disabled={!project || !dirty || busy} icon={<Save size={14} />} onClick={() => void saveProject()}>保存</Button>
-      <Button size="compact" variant="primary" disabled={!project || project.clips.length === 0 || busy} icon={<Download size={14} />} onClick={() => void exportProject()}>导出</Button>
+      <Button size="compact" variant="primary" disabled={!project || project.clips.length === 0 || hasMissingClipSource || hasMissingMusicSource || busy} icon={<Download size={14} />} onClick={() => void exportProject()}>导出</Button>
     </header>
-    {!project ? <div className="ai-edit-empty">新建剪辑工程后，从素材库加入视频或照片</div> : <>
-      <div className="ai-edit-preview-stage">
-        {layers.length ? <LrcRender className="ai-edit-preview-canvas" layers={layers} active={active}
-          canvasWidth={project.canvas.width} canvasHeight={project.canvas.height} maxSide={1600}
-          compositionTime={0} onError={setError} /> : <div className="ai-edit-empty">时间线为空</div>}
-        <div className="ai-edit-playback">
-          <Button size="mini" disabled={!totalDurationMs} icon={playing ? <Pause size={13} /> : <Play size={13} />}
-            onClick={() => { if (playheadMs >= totalDurationMs) setPlayhead(0); setPlaying(value => !value) }} />
-          <span>{clock(playheadMs)} / {clock(totalDurationMs)}</span>
-          <input aria-label="时间线播放位置" type="range" min={0} max={Math.max(1, totalDurationMs)} value={Math.min(playheadMs, totalDurationMs)}
-            onChange={event => { setPlaying(false); setPlayhead(Number(event.target.value)) }} />
-        </div>
+    <aside className="ai-edit-library">
+      <div className="ai-edit-library-heading"><strong>素材库</strong><span>{visibleMedia.length} / {media.length}</span></div>
+      <input className="ai-edit-media-search" aria-label="搜索素材" placeholder="搜索素材名称" value={mediaSearch}
+        onChange={event => setMediaSearch(event.target.value)} />
+      <div className="ai-edit-media-filters" role="group" aria-label="素材类型">
+        {(['all', 'video', 'image', 'audio'] as const).map(kind => <button key={kind} type="button"
+          className={mediaKind === kind ? 'active' : ''} aria-pressed={mediaKind === kind} onClick={() => setMediaKind(kind)}>
+          {kind === 'all' ? '全部' : kind === 'video' ? '视频' : kind === 'image' ? '照片' : '音频'}
+        </button>)}
       </div>
+      <div className="ai-edit-media-list">
+        {visibleMedia.map(item => {
+          const source = project?.sources.find(value => value.mediaId === item.mediaId)
+          const canUseSource = Boolean(source && source.available !== false && source.path)
+          const isSelected = Boolean(source && source.id === selectedSourceId)
+          return <div key={item.mediaId} className={`ai-edit-source-row${isSelected ? ' active' : ''}`}>
+            <button type="button" className="ai-edit-source-copy" disabled={!source}
+              onClick={() => setSelectedSourceId(source?.id ?? '')}>
+              <strong>{item.name}</strong><small>{item.kind === 'video' ? '视频' : item.kind === 'audio' ? '音频' : '照片'}{item.duration ? ` · ${clock(item.duration * 1000)}` : ''}</small>
+            </button>
+            {item.kind === 'audio'
+              ? canUseSource && source
+                ? <Button size="mini" disabled={busy} icon={<Music2 size={12} />} onClick={() => setMusic(source)}>设为配乐</Button>
+                : <Button size="mini" disabled={!project || busy} icon={<Music2 size={12} />} onClick={() => void addAndSetMusic(item.mediaId)}>加入配乐</Button>
+              : canUseSource && source
+                ? <Button size="mini" disabled={busy} icon={<Plus size={12} />} onClick={() => appendToTimeline(source)}>上时间线</Button>
+                : <Button size="mini" disabled={!project || busy} icon={<Plus size={12} />} onClick={() => void addMediaToProject(item.mediaId)}>加入工程</Button>}
+          </div>
+        })}
+        {visibleMedia.length === 0 && <div className="ai-edit-media-empty">没有匹配的素材</div>}
+      </div>
+    </aside>
+    <div className="ai-edit-preview-stage">
+      {!project ? <div className="ai-edit-stage-empty">
+        <span className="ai-edit-stage-empty-icon"><Film size={19} /></span>
+        <strong>选择或新建剪辑工程</strong>
+        <small>打开工程后，可从左侧素材库添加视频或照片</small>
+      </div>
+        : layers.length ? <LrcRender className="ai-edit-preview-canvas" layers={layers} active={active}
+          canvasWidth={project.canvas.width} canvasHeight={project.canvas.height} maxSide={1600}
+          compositionTime={0} onError={setError} /> : <div className="ai-edit-stage-empty">
+          <span className="ai-edit-stage-empty-icon"><Film size={19} /></span>
+          <strong>{hasMissingClipSource ? '素材未关联' : '时间线为空'}</strong>
+          <small>{hasMissingClipSource ? '在左侧素材库关联本地文件后即可继续' : '从左侧素材库选择素材并加入时间线'}</small>
+        </div>}
+      <div className="ai-edit-playback">
+        <Button size="mini" disabled={!project || !totalDurationMs} icon={playing ? <Pause size={13} /> : <Play size={13} />}
+          onClick={() => { if (playheadMs >= totalDurationMs) setPlayhead(0); setPlaying(value => !value) }} />
+        <span>{clock(playheadMs)} / {clock(totalDurationMs)}</span>
+        <input aria-label="时间线播放位置" type="range" min={0} max={Math.max(1, totalDurationMs)} value={Math.min(playheadMs, totalDurationMs)}
+          disabled={!project || !totalDurationMs}
+          onChange={event => { setPlaying(false); setPlayhead(Number(event.target.value)) }} />
+      </div>
+    </div>
       <aside className="ai-edit-inspector">
-        <h3>{currentClip && currentSource ? currentSource.name : '片段'}</h3>
-        {currentClip && currentSource ? <>
+        {!project ? <div className="ai-edit-inspector-empty">新建工程后可调整片段、配乐与画面效果</div> : <>
+        <h3>{currentClip && currentSource ? currentSource.name : '片段参数'}</h3>
+        {currentClip && currentSource && currentSource.available !== false && currentSource.path ? <>
           <label>源起点（秒）<input type="number" min={0} step={0.1} value={(currentClip.sourceStartMs / 1000).toFixed(1)} onChange={event => {
             const value = Math.max(0, Math.round(Number(event.target.value) * 1000))
             updateProject(current => ({ ...current, clips: orderedClips(current.clips.map(clip => clip.id === currentClip.id
@@ -359,7 +641,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
               setSelectedClipId(clips[0]?.id ?? '')
             }}>移除</Button>
           </div>
-        </> : <p>从右侧素材库添加片段到时间线。</p>}
+        </> : currentClip && currentSource ? <p>素材未关联：{currentSource.name}</p> : <p>从左侧素材库加入片段到时间线。</p>}
         <div className="ai-edit-editor-settings">
           <strong>配乐</strong>
           <Select value={project.music ? project.music.sourceId : 'none'} disabled={busy}
@@ -392,36 +674,22 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange }: {
             }))} />
           </label>}
         </div>
-        <div className="ai-edit-sources"><strong>素材库</strong>
-          {media.map(item => {
-            const source = project.sources.find(value => value.mediaId === item.mediaId)
-            return <div key={item.mediaId} className="ai-edit-source-row">
-              <button type="button" className="ai-edit-source-copy" onClick={() => setSelectedSourceId(source?.id ?? '')}>
-                <strong>{item.name}</strong><small>{item.kind === 'video' ? '视频' : item.kind === 'audio' ? '音频' : '照片'}{item.duration ? ` · ${clock(item.duration * 1000)}` : ''}</small>
-              </button>
-              {item.kind === 'audio'
-                ? source ? <Button size="mini" disabled={busy} icon={<Music2 size={12} />} onClick={() => setMusic(source)}>设为配乐</Button>
-                  : <Button size="mini" disabled={busy} icon={<Music2 size={12} />} onClick={() => void addAndSetMusic(item.mediaId)}>加入配乐</Button>
-                : source ? <Button size="mini" disabled={busy} icon={<Plus size={12} />} onClick={() => appendToTimeline(source)}>上时间线</Button>
-                  : <Button size="mini" disabled={busy} onClick={() => void addMediaToProject(item.mediaId)}>加入工程</Button>}
-            </div>
-          })}
-        </div>
+        </>}
       </aside>
       <div className="ai-edit-timeline">
-        <div className="ai-edit-timeline-head"><span>时间线</span><span>{project.clips.length} 段</span><span>{clock(project.clips.reduce((total, clip) => total + clipDuration(clip), 0))}</span></div>
+        <div className="ai-edit-timeline-head"><strong>时间线</strong><span>{project?.clips.length ?? 0} 段</span><span>{clock(totalDurationMs)}</span></div>
         <div className="ai-edit-clip-list">
-          {orderedClips(project.clips).map(clip => {
+          {orderedClips(project?.clips ?? []).map(clip => {
             const source = sourceById.get(clip.sourceId)
             if (!source) return null
-            return <button type="button" key={clip.id} className={`ai-edit-clip${currentClip?.id === clip.id ? ' active' : ''}`} onClick={() => setSelectedClipId(clip.id)}>
+            return <button type="button" key={clip.id} className={`ai-edit-clip${currentClip?.id === clip.id ? ' active' : ''}`}
+              style={{ flexGrow: clipDuration(clip) }} onClick={() => setSelectedClipId(clip.id)}>
               <strong>{source.name}</strong><small>{clock(clip.sourceStartMs)}–{clock(clip.sourceEndMs)}</small>
             </button>
           })}
-          {project.clips.length === 0 && <span className="ai-edit-empty-inline">时间线为空</span>}
+          {(!project || project.clips.length === 0) && <span className="ai-edit-empty-inline">素材加入工程后可编排片段顺序</span>}
         </div>
       </div>
-    </>}
     {error && <div className="ai-edit-error" role="alert">{error}</div>}
     <datalist id="ai-edit-source-list">{media.map(item => <option key={item.mediaId} value={item.name} />)}</datalist>
     <span hidden>{selectedSource?.name}</span>

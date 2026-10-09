@@ -48,16 +48,12 @@ export function AppNav({ activeDevice, connection, sourceMode, onChangeConnectio
           <NavLink to="/ai-selection" className={({ isActive }) => (isActive ? 'active' : '')}>
             AI 选片
           </NavLink>
-          <NavLink to="/ai-director" className={({ isActive }) => (isActive ? 'active' : '')}>
-            AI 导拍
+          <NavLink to="/ai-shooting" className={({ isActive }) => (isActive ? 'active' : '')}>
+            拍摄计划
           </NavLink>
-          <button
-            type="button"
-            className="nav-action"
-            onClick={() => void window.luna.aiEditor.openWindow()}
-          >
+          <NavLink to="/ai-editor" state={{ projectId: null }} className={({ isActive }) => (isActive ? 'active' : '')}>
             AI 剪辑
-          </button>
+          </NavLink>
           <NavLink to="/workspace" className={({ isActive }) => (isActive ? 'active' : '')}>
             工作台
           </NavLink>

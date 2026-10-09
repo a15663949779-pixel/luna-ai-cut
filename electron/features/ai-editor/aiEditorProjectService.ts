@@ -3,7 +3,8 @@ import * as path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 import type { EditProjectSource, EditProjectSummary, LunaEditProject } from '../../../src/shared/types/aiEditing.ts'
-import { getAiEditorLocalMedia } from './aiEditorLocalMediaService.ts'
+import type { LunaEditWireProject } from '../../../src/shared/types/lunaEditingSync.ts'
+import { getAiEditorLocalMedia, listAiEditorLocalMedia } from './aiEditorLocalMediaService.ts'
 import { getAiEditorLocalMediaMetadata } from './aiEditorMediaMetadataService.ts'
 
 export const AI_EDITOR_PROJECTS_DIR = 'ai-editor-projects'
@@ -68,13 +69,136 @@ async function readProject(filePath: string): Promise<LunaEditProject | null> {
 async function resolveTrustedSources(project: LunaEditProject): Promise<LunaEditProject> {
   const sources = await Promise.all(project.sources.map(async (source) => {
     if (typeof source.mediaId !== 'string' || !source.mediaId) throw new Error(`素材来源无效：${source.name}`)
+    if (source.available === false) {
+      try {
+        const media = await getAiEditorLocalMedia(source.mediaId)
+        if (media.kind !== source.kind) return { ...source, path: '', available: false }
+        return { ...source, path: path.resolve(media.filePath), name: media.name, available: true }
+      } catch {
+        return { ...source, path: '', available: false }
+      }
+    }
     const media = await getAiEditorLocalMedia(source.mediaId)
     if (media.kind !== source.kind || path.resolve(media.filePath) !== path.resolve(source.path)) {
       throw new Error(`素材来源已变化，请重新加入工程：${source.name}`)
     }
-    return { ...source, path: path.resolve(media.filePath), name: media.name }
+    return { ...source, path: path.resolve(media.filePath), name: media.name, available: true }
   }))
   return { ...project, sources }
+}
+
+function isSyncedWireProject(value: unknown): value is LunaEditWireProject {
+  if (!value || typeof value !== 'object') return false
+  const project = value as Partial<LunaEditWireProject>
+  if (project.schema !== 'luna-edit-project-v1' || typeof project.id !== 'string'
+    || !/^[\w.-]{1,100}$/.test(project.id) || project.id === '.' || project.id === '..'
+    || typeof project.name !== 'string' || !project.name.trim()
+    || typeof project.created_at !== 'string' || !Number.isFinite(Date.parse(project.created_at))
+    || typeof project.updated_at !== 'string' || !Number.isFinite(Date.parse(project.updated_at))
+    || !(project.director_plan_id === null || typeof project.director_plan_id === 'string')
+    || !project.canvas || !Array.isArray(project.media) || !Array.isArray(project.clips)
+    || !project.look || !project.extensions || typeof project.extensions !== 'object') return false
+  if (!Number.isInteger(project.canvas.width) || project.canvas.width < 16 || project.canvas.width > 7680
+    || !Number.isInteger(project.canvas.height) || project.canvas.height < 16 || project.canvas.height > 7680
+    || !Number.isFinite(project.canvas.fps) || project.canvas.fps < 1 || project.canvas.fps > 120) return false
+  const sourceIds = new Set<string>()
+  for (const source of project.media) {
+    if (!source || typeof source.source_id !== 'string' || !source.source_id.trim()
+      || typeof source.media_id !== 'string' || !source.media_id.trim()
+      || typeof source.name !== 'string' || !['video', 'image', 'audio'].includes(source.kind)
+      || !(source.duration_ms === null || (Number.isInteger(source.duration_ms) && source.duration_ms >= 0))
+      || !(source.width === null || (Number.isInteger(source.width) && source.width > 0))
+      || !(source.height === null || (Number.isInteger(source.height) && source.height > 0))
+      || sourceIds.has(source.source_id)) return false
+    sourceIds.add(source.source_id)
+  }
+  const clipIds = new Set<string>()
+  for (const clip of project.clips) {
+    if (!clip || typeof clip.id !== 'string' || !clip.id.trim() || clipIds.has(clip.id)
+      || !sourceIds.has(clip.source_id) || !Number.isInteger(clip.source_start_ms)
+      || !Number.isInteger(clip.source_end_ms) || clip.source_start_ms < 0
+      || clip.source_end_ms <= clip.source_start_ms || !Number.isFinite(clip.timeline_start_ms)
+      || clip.timeline_start_ms < 0 || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 1) return false
+    clipIds.add(clip.id)
+  }
+  if (!project.music) return true
+  return sourceIds.has(project.music.source_id)
+    && Number.isInteger(project.music.source_start_ms) && project.music.source_start_ms >= 0
+    && Number.isInteger(project.music.source_end_ms) && project.music.source_end_ms > project.music.source_start_ms
+    && Number.isFinite(project.music.volume) && project.music.volume >= 0 && project.music.volume <= 1
+}
+
+async function localProjectFromWire(wire: LunaEditWireProject, revision: number): Promise<LunaEditProject> {
+  const listedMedia = await listAiEditorLocalMedia({ limit: 500 })
+  const sources = await Promise.all(wire.media.map(async (source): Promise<EditProjectSource> => {
+    const local = listedMedia.find(item => item.mediaId === source.media_id
+      || item.directorContexts?.some(context => context.takeId === source.media_id || context.takeId === source.source_id))
+    if (!local || local.kind !== source.kind) {
+      return { id: source.source_id, mediaId: source.media_id, name: source.name, kind: source.kind,
+        path: '', available: false, syncMediaId: source.media_id,
+        durationMs: source.duration_ms, width: source.width, height: source.height }
+    }
+    try {
+      const trusted = await getAiEditorLocalMedia(local.mediaId)
+      return { id: source.source_id, mediaId: trusted.mediaId, name: source.name, kind: source.kind,
+        path: path.resolve(trusted.filePath), available: true, syncMediaId: source.media_id,
+        durationMs: source.duration_ms ?? (trusted.duration ? Math.round(trusted.duration * 1000) : null),
+        width: source.width, height: source.height }
+    } catch {
+      return { id: source.source_id, mediaId: source.media_id, name: source.name, kind: source.kind,
+        path: '', available: false, syncMediaId: source.media_id,
+        durationMs: source.duration_ms, width: source.width, height: source.height }
+    }
+  }))
+  const pcExtensions = wire.extensions['com.luna.pc']
+  const musicEnabled = pcExtensions && typeof pcExtensions === 'object' && !Array.isArray(pcExtensions)
+    ? (pcExtensions as Record<string, unknown>).music_enabled !== false : true
+  const filter = wire.look.filter && typeof wire.look.filter.id === 'string'
+    && Number.isFinite(wire.look.filter.intensity) && typeof wire.look.filter.enabled === 'boolean'
+    ? { id: wire.look.filter.id, intensity: wire.look.filter.intensity, enabled: wire.look.filter.enabled } : null
+  const watermark = wire.look.watermark && typeof wire.look.watermark === 'object'
+    && typeof wire.look.watermark.id === 'string'
+    ? wire.look.watermark as LunaEditProject['watermark'] : null
+  return {
+    schemaVersion: 1, id: wire.id, name: wire.name, createdAt: wire.created_at, updatedAt: wire.updated_at,
+    revision, directorPlanId: wire.director_plan_id, canvas: { ...wire.canvas }, sources,
+    clips: wire.clips.map(clip => ({ id: clip.id, sourceId: clip.source_id,
+      sourceStartMs: clip.source_start_ms, sourceEndMs: clip.source_end_ms,
+      timelineStartMs: clip.timeline_start_ms, volume: clip.volume,
+      ...(clip.color ? { color: { ...clip.color } } : {}), ...(clip.crop ? { crop: { ...clip.crop } } : {}),
+      ...(clip.photo_motion ? { photoMotion: clip.photo_motion } : {}),
+      ...(clip.speed_curve ? { speedCurve: { interpolation: clip.speed_curve.interpolation,
+        points: clip.speed_curve.points.map(point => ({ ...point })) } } : {}),
+      ...(clip.fade_out_ms !== undefined ? { fadeOutMs: clip.fade_out_ms } : {}) })),
+    music: wire.music ? { sourceId: wire.music.source_id, sourceStartMs: wire.music.source_start_ms,
+      sourceEndMs: wire.music.source_end_ms, volume: wire.music.volume,
+      ...(wire.music.timing ? { timing: { bpm: wire.music.timing.bpm, duration: wire.music.timing.duration,
+        beatTimes: [...wire.music.timing.beat_times], downbeats: [...wire.music.timing.downbeats],
+        percussionHits: wire.music.timing.percussion_hits.map(hit => ({ ...hit })) } } : {}) } : null,
+    musicEnabled, filter, watermark,
+    syncExtensions: JSON.parse(JSON.stringify(wire.extensions)) as Record<string, unknown>,
+    aiUndo: [],
+  }
+}
+
+export async function importAiEditorSyncedProject(
+  baseDir: string,
+  wire: LunaEditWireProject,
+  expectedLocalRevision?: number,
+): Promise<LunaEditProject> {
+  if (!isSyncedWireProject(wire)) throw new Error('手机剪辑工程格式无效')
+  return withProjectOperation(baseDir, wire.id, async () => {
+    const filePath = projectPath(baseDir, wire.id)
+    const saved = await readProject(filePath)
+    if (saved && (expectedLocalRevision === undefined || saved.revision !== expectedLocalRevision)) {
+      throw new Error('电脑工程已变化，请重新同步')
+    }
+    if (!saved && expectedLocalRevision !== undefined) throw new Error('电脑工程已变化，请重新同步')
+    if (!saved && await fs.stat(filePath).then(() => true, () => false)) throw new Error('电脑工程文件无法读取')
+    const imported = await localProjectFromWire(wire, (saved?.revision ?? 0) + 1)
+    await writeProjectAt(baseDir, imported)
+    return imported
+  })
 }
 
 async function writeProjectAt(baseDir: string, project: LunaEditProject): Promise<void> {

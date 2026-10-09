@@ -18,6 +18,7 @@ import {
   deleteAiEditorProject,
   listAiEditorProjects,
   loadAiEditorProject,
+  importAiEditorSyncedProject,
   renameAiEditorProject,
   saveAiEditorProject,
 } from '../features/ai-editor/aiEditorProjectService.ts'
@@ -101,6 +102,9 @@ export function register(): void {
       logMainError('[AI 剪辑] 保存工程失败', { projectId: project?.id, error: summaryError(error) })
       throw error
     }
+  })
+  ipcMain.handle('ai-editor:import-synced-project', async (_event, project, expectedLocalRevision?: number) => {
+    return importAiEditorSyncedProject((await getSettings()).baseDir, project, expectedLocalRevision)
   })
   ipcMain.handle('ai-editor:add-media', async (_event, projectId: string, mediaIds: string[]) => addAiEditorProjectMedia((await getSettings()).baseDir, projectId, mediaIds))
   ipcMain.handle('ai-editor:delete-project', async (_event, projectId: string) => deleteAiEditorProject((await getSettings()).baseDir, projectId))
