@@ -17,9 +17,15 @@
   color: var(--ink);
 }
 
-.live-console-header,
-.live-console-error {
+.live-console-header {
   width: 100%;
+}
+
+.live-console-error {
+  flex: 0 0 auto;
+  margin: 0 0 14px;
+  color: var(--red, #e53e3e);
+  font-size: 12px;
 }
 
 .live-console-header,
@@ -89,14 +95,6 @@
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.live-console-error {
-  flex: 0 0 auto;
-  margin-top: 0;
-  margin-bottom: 14px;
-  color: #c0392b;
-  font-size: 12px;
 }
 
 @media (max-width: 760px) {
