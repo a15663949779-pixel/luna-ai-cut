@@ -9,13 +9,22 @@ import type {
   LunaKaHttpMethod,
   LunaKaHttpRequestOptions,
 } from '../../src/shared/types'
+import { currentBaseDir } from '../storage/settingsService'
 import { LunaKaWebSocketChannel } from './lunaka_websocket_channel'
 import { lunaKaHttpErrorMessage } from './lunaKaHttpError'
 import { lunaKaDeviceName } from './lunaka_device_name'
 
 interface StoredCredentials {
   clientId: string
-  services: Record<string, string>
+  pairedDevices?: Record<string, string>
+  /** Origin keyed keys are read only when migrating credentials from older builds. */
+  services?: Record<string, string>
+}
+
+interface PhoneServiceInfo {
+  service?: unknown
+  api_version?: unknown
+  device_id?: unknown
 }
 
 interface HttpResult {
@@ -24,13 +33,18 @@ interface HttpResult {
 }
 
 const STORE_FILE = 'lunaka-http-client.json'
+const PAIRED_DEVICES_FILE = 'lan-paired-devices.json'
 const MAX_RESPONSE_BYTES = 24 * 1024 * 1024
 const AUTHORIZATION_PATH = '/api/v1/auth/authorize'
+const PAIRING_PATH = '/api/v1/auth/pair'
 const AUTHORIZATION_CHECK_PATH = '/api/v1/auth/check'
+const PHONE_DEVICE_ID = /^luna-mobile-[A-Za-z0-9_-]{20,40}$/
 
 export class LunaKaHttpClient {
   private clientId: string | null = null
   private readonly keysByOrigin = new Map<string, string>()
+  private readonly keysByDeviceId = new Map<string, string>()
+  private readonly deviceIdsByOrigin = new Map<string, string>()
   private readonly connectionTasks = new Map<string, Promise<void>>()
   private loadTask: Promise<void> | null = null
   private writeTask: Promise<void> = Promise.resolve()
@@ -57,6 +71,12 @@ export class LunaKaHttpClient {
     ipcMain.handle('luna-ka-http-client:connect', (_event, endpoint: unknown) => {
       if (typeof endpoint !== 'string') throw new Error('手机地址无效')
       return this.connect(endpoint)
+    })
+    ipcMain.handle('luna-ka-http-client:pair', (_event, endpoint: unknown, code: unknown) => {
+      if (typeof endpoint !== 'string' || typeof code !== 'string') {
+        throw new Error('手机或配对码无效')
+      }
+      return this.pair(endpoint, code)
     })
     ipcMain.handle(
       'luna-ka-http-client:request',
@@ -86,6 +106,44 @@ export class LunaKaHttpClient {
     }
   }
 
+  async pair(endpoint: string, pairingCode: string): Promise<{ deviceId: string }> {
+    const base = this.normalizeEndpoint(endpoint)
+    const code = pairingCode.trim()
+    if (!/^\d{8}$/.test(code)) throw new Error('请输入 8 位配对码')
+    await this.ensureLoaded()
+    const phone = await this.readPhoneInfo(base)
+    if (!phone.deviceId) throw new Error('手机版本不支持配对码，请更新手机应用')
+    const response = await this.performRequest(
+      new URL(PAIRING_PATH, base),
+      'POST',
+      {
+        client_id: this.clientId,
+        client_name: await lunaKaDeviceName(),
+        pairing_code: code,
+      },
+      { 'Content-Type': 'application/json' },
+    )
+    if (response.statusCode !== 200) {
+      throw this.httpError(response, '配对失败，请检查配对码')
+    }
+    let payload: { client_id?: unknown; device_id?: unknown; authorization_key?: unknown }
+    try {
+      payload = JSON.parse(response.body) as typeof payload
+    } catch {
+      throw new Error('手机返回的配对信息无效')
+    }
+    if (payload.client_id !== this.clientId || payload.device_id !== phone.deviceId
+      || typeof payload.authorization_key !== 'string' || payload.authorization_key.length < 32) {
+      throw new Error('手机返回的配对信息无效')
+    }
+    this.keysByDeviceId.set(phone.deviceId, payload.authorization_key)
+    this.deviceIdsByOrigin.set(base.origin, phone.deviceId)
+    this.keysByOrigin.set(base.origin, payload.authorization_key)
+    await this.persist()
+    await this.connect(base.origin)
+    return { deviceId: phone.deviceId }
+  }
+
   async request<T>(
     endpoint: string,
     requestPath: string,
@@ -96,7 +154,7 @@ export class LunaKaHttpClient {
     await this.connect(base.origin)
     let result = await this._requestAuthorized(base.origin, url, options)
     if (result.statusCode === 401) {
-      this.keysByOrigin.delete(base.origin)
+      this.removeOriginCredential(base.origin)
       await this.persist()
       await this.connect(base.origin)
       result = await this._requestAuthorized(base.origin, url, options)
@@ -122,6 +180,45 @@ export class LunaKaHttpClient {
 
   private async _connect(base: URL): Promise<void> {
     await this.ensureLoaded()
+    const phone = await this.readPhoneInfo(base)
+    if (phone.deviceId) {
+      this.deviceIdsByOrigin.set(base.origin, phone.deviceId)
+      const pairedKey = this.keysByDeviceId.get(phone.deviceId)
+      if (pairedKey) {
+        this.keysByOrigin.set(base.origin, pairedKey)
+        const check = await this.performRequest(
+          new URL(AUTHORIZATION_CHECK_PATH, base),
+          'GET',
+          undefined,
+          this.headersFor(pairedKey),
+        )
+        if (check.statusCode === 204 || check.statusCode === 200) return
+        if (check.statusCode !== 401) throw this.httpError(check, '无法验证手机授权')
+        this.keysByDeviceId.delete(phone.deviceId)
+        this.removeOriginCredential(base.origin)
+        await this.persist()
+        throw new Error('手机配对已失效，请重新配对')
+      }
+
+      // Migrate a token from an older origin-keyed store to the stable phone ID.
+      const migratedKey = this.keysByOrigin.get(base.origin)
+      if (migratedKey) {
+        const check = await this.performRequest(
+          new URL(AUTHORIZATION_CHECK_PATH, base),
+          'GET',
+          undefined,
+          this.headersFor(migratedKey),
+        )
+        if (check.statusCode === 204 || check.statusCode === 200) {
+          this.keysByDeviceId.set(phone.deviceId, migratedKey)
+          await this.persist()
+          return
+        }
+        this.removeOriginCredential(base.origin)
+      }
+      throw new Error('请在手机设置中打开配对码，再输入配对')
+    }
+
     const key = this.keysByOrigin.get(base.origin)
     if (key) {
       const check = await this.performRequest(
@@ -188,6 +285,32 @@ export class LunaKaHttpClient {
       Authorization: `Bearer ${key}`,
       'X-Luna-Client-Id': this.clientId,
     }
+  }
+
+  private async readPhoneInfo(base: URL): Promise<{ deviceId: string | null }> {
+    const response = await this.performRequest(new URL('/', base), 'GET')
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw this.httpError(response, '无法连接手机')
+    }
+    let payload: PhoneServiceInfo
+    try {
+      payload = JSON.parse(response.body) as PhoneServiceInfo
+    } catch {
+      throw new Error('手机返回的服务信息无效')
+    }
+    if (payload.service !== 'luna-ka-api' || payload.api_version !== 1) {
+      throw new Error('当前设备不是受支持的 Luna 咔服务')
+    }
+    return {
+      deviceId: typeof payload.device_id === 'string' && PHONE_DEVICE_ID.test(payload.device_id)
+        ? payload.device_id
+        : null,
+    }
+  }
+
+  private removeOriginCredential(origin: string): void {
+    this.keysByOrigin.delete(origin)
+    this.deviceIdsByOrigin.delete(origin)
   }
 
   private performRequest(
@@ -293,13 +416,26 @@ export class LunaKaHttpClient {
 
   private async loadCredentials(): Promise<void> {
     try {
-      const serialized = await fs.readFile(path.join(app.getPath('userData'), STORE_FILE), 'utf8')
+      const filePath = path.join(currentBaseDir(), PAIRED_DEVICES_FILE)
+      let serialized: string
+      try {
+        serialized = await fs.readFile(filePath, 'utf8')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        serialized = await fs.readFile(path.join(app.getPath('userData'), STORE_FILE), 'utf8')
+      }
       const data = JSON.parse(serialized) as Partial<StoredCredentials>
       if (
         typeof data.clientId === 'string' &&
         /^[A-Za-z0-9._:-]{8,128}$/.test(data.clientId)
       ) {
         this.clientId = data.clientId
+      }
+      if (data.pairedDevices && typeof data.pairedDevices === 'object') {
+        for (const [deviceId, key] of Object.entries(data.pairedDevices)) {
+          if (!PHONE_DEVICE_ID.test(deviceId) || typeof key !== 'string' || key.length < 32 || key.length > 256) continue
+          this.keysByDeviceId.set(deviceId, key)
+        }
       }
       if (data.services && typeof data.services === 'object') {
         for (const [origin, key] of Object.entries(data.services)) {
@@ -315,6 +451,7 @@ export class LunaKaHttpClient {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         this.clientId = randomUUID()
         this.keysByOrigin.clear()
+        this.keysByDeviceId.clear()
       }
     }
     this.clientId ??= randomUUID()
@@ -325,11 +462,14 @@ export class LunaKaHttpClient {
     if (!clientId) throw new Error('局域网客户端未初始化')
     const snapshot = JSON.stringify({
       clientId,
+      pairedDevices: Object.fromEntries(this.keysByDeviceId),
       services: Object.fromEntries(this.keysByOrigin),
     } satisfies StoredCredentials)
     const write = this.writeTask.catch(() => undefined).then(async () => {
-      const filePath = path.join(app.getPath('userData'), STORE_FILE)
+      const directory = currentBaseDir()
+      const filePath = path.join(directory, PAIRED_DEVICES_FILE)
       const temporaryPath = `${filePath}.tmp`
+      await fs.mkdir(directory, { recursive: true, mode: 0o700 })
       await fs.writeFile(temporaryPath, `${snapshot}\n`, {
         encoding: 'utf8',
         mode: 0o600,

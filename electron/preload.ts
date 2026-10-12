@@ -75,6 +75,7 @@ const lunaApi: LunaApi & { exportTask: LunaExportTaskApi } = {
   isPackaged: ipcRenderer.sendSync('app:is-packaged') === true,
   lunaKaHttpClient: {
     connect: (endpoint: string) => ipcRenderer.invoke('luna-ka-http-client:connect', endpoint),
+    pair: (endpoint: string, code: string) => ipcRenderer.invoke('luna-ka-http-client:pair', endpoint, code),
     request: <T,>(endpoint: string, requestPath: string, options?: LunaKaHttpRequestOptions) =>
       ipcRenderer.invoke('luna-ka-http-client:request', endpoint, requestPath, options) as Promise<T>,
     connectChannel: (endpoint: string) => ipcRenderer.invoke('luna-ka-http-client:channel:connect', endpoint),

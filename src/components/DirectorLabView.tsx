@@ -1,6 +1,6 @@
 import { useAgentChat } from './agent-chat/agentChatContext'
-import { useEffect } from 'react'
-import { ArrowLeft, Box, FolderSync, FolderDown, FolderOpen, ListFilter, Pencil, RefreshCw, Save, Scissors, Search, WandSparkles, X, FileUp } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Box, FileUp, FolderDown, FolderOpen, FolderSync, ListFilter, Pencil, RefreshCw, Save, Scissors, Search, Smartphone, WandSparkles, X } from 'lucide-react'
 import { DirectorMaterialSyncControl } from './DirectorMaterialSyncControl'
 import { Button, IconButton, Input, LoadingIndicator, Select, Tooltip } from '../ui'
 import { DirectorMediaPreviewDialog } from './DirectorMediaPreviewDialog'
@@ -9,6 +9,7 @@ import { DirectorLabPlanList } from './DirectorLabPlanList'
 import { DirectorLabShotList } from './DirectorLabShotList'
 import { DirectorPlanConflictDialog } from './DirectorPlanConflictDialog'
 import { DirectorPlanImportDialog } from './DirectorPlanImportDialog'
+import { DirectorLabPairDialog } from './DirectorLabPairDialog'
 import { DirectorPlanMainContent } from './DirectorPlanMainContent'
 import { useDirectorLab } from '../hooks/useDirectorLab'
 import type { DirectorLanPlanSummary } from '../shared/types'
@@ -42,6 +43,7 @@ function formatPlanCreatedAt(value: string | null | undefined): string {
 
 export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelectPlan,
   onReturnToProjects, onConnectedEndpointChange, onCreateEditFromPlan }: DirectorLabViewProps) {
+  const [pairingOpen, setPairingOpen] = useState(false)
   const {
     handlePlanDeleted,
     connectedEndpoint,
@@ -119,7 +121,7 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
     <div className="lab-page lab-director-page">
       <header className="lab-director-page-header">
         <div className="lab-title-block">
-          {activePlan && !onReturnToProjects && <Tooltip content="返回计划列表">
+          {activePlan && <Tooltip content="返回计划列表">
             <IconButton
               variant="ghost"
               size="compact"
@@ -142,6 +144,8 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
           <h1>拍摄计划</h1>
         </div>
         <div className="lab-director-sync-actions">
+          <Button size="compact" variant="secondary" icon={<Smartphone size={14} />}
+            onClick={() => setPairingOpen(true)}>配对手机</Button>
           {!activePlan && <Button size="compact" variant="secondary" icon={<FileUp size={15} />}
             onClick={() => setImportOpen(true)}>新建计划</Button>}
           {connectedEndpoint && (
@@ -385,6 +389,15 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
         setEditingPlanTitle(false)
         setPreviewTakeId(null)
       }} />
+      <DirectorLabPairDialog
+        open={pairingOpen}
+        onOpenChange={setPairingOpen}
+        onPaired={async (endpoint) => {
+          const connected = await loadPlans(endpoint)
+          if (connected) await retrySynchronization()
+          return connected
+        }}
+      />
       <DirectorPlanConflictDialog
         open={conflictsOpen}
         onOpenChange={setConflictsOpen}

@@ -14,6 +14,11 @@ export interface DirectorPlanSyncBaseline {
   localSignature: string
 }
 
+export function isDirectorShootingPlan(plan: DirectorLanPlanSummary): boolean {
+  // Plans from older mobile versions predate the kind field and are shooting plans.
+  return plan.kind == null || plan.kind === 'shooting'
+}
+
 function stablePlanContent(plan: DirectorLanPlanSummary) {
   return {
     title: plan.title,
@@ -28,6 +33,8 @@ function stablePlanContent(plan: DirectorLanPlanSummary) {
       durationMs: shot.duration_ms,
       ...(shot.shot_recipe !== undefined ? { shotRecipe: shot.shot_recipe } : {}),
       remark: shot.remark,
+      actionGuidance: shot.action_guidance ?? '',
+      subtitle: shot.subtitle ?? '',
       ...(shot.takes.some(take => take.markers?.length) ? { takeMarkers: shot.takes.filter(take => take.markers?.length)
         .map(take => ({ id: take.id, markers: validateDirectorTakeMarkers(take.markers) })) } : {}),
       ...(shot.takes.some(take => take.selected_range) ? { takeRanges: shot.takes.filter(take => take.selected_range).map(take => ({ id: take.id, selectedRange: take.selected_range })) } : {}),
@@ -73,6 +80,8 @@ export function directorPlanConflictDetails(remote: DirectorLanPlanSummary, loca
     compare(`${name} · 名称`, remoteShot.name, localShot.name)
     compare(`${name} · 时长`, `${remoteShot.duration_ms / 1000} 秒`, `${localShot.duration_ms / 1000} 秒`)
     compare(`${name} · 备注`, remoteShot.remark, localShot.remark)
+    compare(`${name} · 动作指导`, remoteShot.action_guidance ?? '', localShot.action_guidance ?? '')
+    compare(`${name} · 字幕`, remoteShot.subtitle ?? '', localShot.subtitle ?? '')
     compare(`${name} · 镜头方案`, JSON.stringify(remoteShot.shot_recipe ?? null), JSON.stringify(localShot.shot_recipe ?? null))
     const attributeIds = new Set([...remoteShot.attributes, ...localShot.attributes].map((field) => field.id))
     for (const attributeId of attributeIds) {
@@ -94,10 +103,13 @@ export function buildDirectorPlanUpdate(
 ) {
   const shots = plan.shots.map((shot) => {
     const fields = normalizeDirectorShotFields(shot, schema)
-    if (fields.remark.length > 4000 || fields.attributes.some((field) => field.description.length > 4000 || field.id.length > 128)) {
+    if (fields.remark.length > 4000 || (shot.action_guidance?.length ?? 0) > 4000
+      || fields.attributes.some((field) => field.description.length > 4000 || field.id.length > 128)) {
       throw new Error('镜头内容超过手机接口限制（invalid-plan-update）')
     }
     return { id: shot.id, name: shot.name, duration_ms: shot.duration_ms, ...fields,
+      action_guidance: shot.action_guidance ?? '',
+      subtitle: shot.subtitle ?? '',
       ...(shot.shot_recipe !== undefined ? { shot_recipe: shot.shot_recipe } : {}),
       ...(includeTakeRanges ? { take_ranges: shot.takes.filter(take => take.kind === 'video' && !plan.pending_take_ids?.includes(take.id)
         && !plan.deleted_local_take_ids?.includes(take.id)).map(take => ({ id: take.id, selected_range: take.selected_range,

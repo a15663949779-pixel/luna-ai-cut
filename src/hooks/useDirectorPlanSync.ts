@@ -7,6 +7,7 @@ import {
   directorPlanRevision,
   directorPlanHasSameShots,
   nextDirectorPlanBaseline,
+  isDirectorShootingPlan,
   type DirectorPlanSyncBaseline,
 } from '../lib/directorPlanSync'
 import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
@@ -94,10 +95,11 @@ export function useDirectorPlanSync({
     const task = (async () => {
       setStatus('syncing')
       try {
-        const [remotePlans, initialLocalPlans] = await Promise.all([
+        const [remotePlans, allLocalPlans] = await Promise.all([
           requestRemotePlans(),
           window.luna.directorLab.listLocalPlans().catch((): DirectorLanPlanSummary[] => []),
         ])
+        const initialLocalPlans = allLocalPlans.filter(isDirectorShootingPlan)
         if (!mountedRef.current || endpointRef.current !== activeEndpoint) return
 
         const removedIds = new Set(await window.luna.directorLab.reconcilePlanDeletions(

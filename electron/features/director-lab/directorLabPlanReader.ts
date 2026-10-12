@@ -30,6 +30,8 @@ interface LocalManifestShot {
   order?: unknown
   attributes?: unknown
   remark?: unknown
+  action_guidance?: unknown
+  subtitle?: unknown
   visual_description?: unknown
   movement_description?: unknown
   duration_ms?: unknown
@@ -218,6 +220,8 @@ async function localPlanFromManifest(manifestPath: string, probeMediaOne?: (requ
         attributes,
         shot_recipe: shot.shot_recipe,
         remark: typeof shot.remark === 'string' ? shot.remark : '',
+        action_guidance: typeof shot.action_guidance === 'string' ? shot.action_guidance : '',
+        subtitle: typeof shot.subtitle === 'string' ? shot.subtitle : '',
         visual_description: legacyShotAttribute(
           { attributes },
           ['画面说明', '画面', '目标', '拍摄目标'],

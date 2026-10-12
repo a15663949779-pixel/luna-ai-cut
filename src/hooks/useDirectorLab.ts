@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirectorLabDownloadProgress, DirectorLabMediaMetadata, DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
 import { useDirectorPlanSync } from './useDirectorPlanSync'
 import { useDirectorMaterialSyncControl } from './useDirectorMaterialSyncControl'
-import { directorPlanContentSignature, overlayDirectorLocalPlan } from '../lib/directorPlanSync'
+import { directorPlanContentSignature, isDirectorShootingPlan, overlayDirectorLocalPlan } from '../lib/directorPlanSync'
 import { buildDirectorAiPrompt } from '../lib/directorAiPrompt'
 import { toast } from '../ui'
 import { normalizeEndpoint, requestPlans, requestSchema } from '../lib/directorLanPlans'
@@ -77,13 +77,14 @@ export function useDirectorLab(active: boolean) {
   }, [activePlan, shotQuery, shotSort])
 
   const mergePlans = useCallback((remotePlans: DirectorLanPlanSummary[]): void => {
+    const shootingPlans = remotePlans.filter(isDirectorShootingPlan)
     setPlans((current) => {
       const currentById = new Map(current.map((plan) => [plan.id, plan]))
       const localById = new Map(
         current.filter((plan) => plan.local_directory).map((plan) => [plan.id, plan]),
       )
-      const remoteIds = new Set(remotePlans.map((plan) => plan.id))
-      const mergedRemote = remotePlans.map((remote) => {
+      const remoteIds = new Set(shootingPlans.map((plan) => plan.id))
+      const mergedRemote = shootingPlans.map((remote) => {
         const local = localById.get(remote.id)
         const previous = currentById.get(remote.id)
         return local
@@ -112,7 +113,7 @@ export function useDirectorLab(active: boolean) {
     ])
     schemaRef.current = definitions
     setSchema(definitions)
-    const remotePlans = payload.plans.map((plan) => ({
+    const remotePlans = payload.plans.filter(isDirectorShootingPlan).map((plan) => ({
       ...plan, remote_origin: new URL(connectedEndpoint).origin,
     }))
     mergePlans(remotePlans)
@@ -308,9 +309,10 @@ export function useDirectorLab(active: boolean) {
       ])
       schemaRef.current = definitions
       setSchema(definitions)
-      mergePlans(payload.plans)
+      const shootingPlans = payload.plans.filter(isDirectorShootingPlan)
+      mergePlans(shootingPlans)
       setConnectedEndpoint(normalized)
-      setActivePlanId((current) => payload.plans.some((plan) => plan.id === current)
+      setActivePlanId((current) => shootingPlans.some((plan) => plan.id === current)
         ? current
         : null)
       localStorage.setItem(ENDPOINT_STORAGE_KEY, normalized)

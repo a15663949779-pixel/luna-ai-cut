@@ -54,6 +54,7 @@ export interface DirectorLabMediaMetadata {
 
 export interface DirectorLabDiscoveredService {
   id: string
+  deviceId?: string
   name: string
   host: string
   port: number
@@ -176,6 +177,8 @@ export interface DirectorLanShot {
   attributes: DirectorLanShotAttribute[]
   /** 镜头额外备注，不属于计划属性。 */
   remark: string
+  action_guidance?: string
+  subtitle?: string
   visual_description?: string
   movement_description?: string
   duration_ms: number

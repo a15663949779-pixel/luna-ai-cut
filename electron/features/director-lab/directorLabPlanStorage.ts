@@ -159,6 +159,8 @@ export function manifestForPlan(
       name: shot.name,
       attributes: shot.attributes ?? [],
       remark: shot.remark ?? '',
+      action_guidance: shot.action_guidance ?? '',
+      subtitle: shot.subtitle ?? '',
       visual_description: legacyShotAttribute(shot, ['画面说明', '画面', '目标', '拍摄目标'])
         || shot.visual_description
         || '',

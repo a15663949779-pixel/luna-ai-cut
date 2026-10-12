@@ -1,4 +1,3 @@
-import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { DirectorLanPlanSummary } from '../../../src/shared/types/directorLab.ts'
 import { directorPlanContentSignature } from '../../../src/lib/directorPlanSync.ts'

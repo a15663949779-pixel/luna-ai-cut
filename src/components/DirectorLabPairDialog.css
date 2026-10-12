@@ -1,0 +1,32 @@
+.director-lab-pair-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.director-lab-pair-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.director-lab-pair-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.director-lab-pair-device .ui-select-full {
+  min-width: 0;
+  flex: 1;
+}
+
+.director-lab-pair-fields > .ui-input-full {
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.director-lab-pair-error {
+  margin: 0;
+  color: var(--red, #e53e3e);
+  font-size: 12px;
+  line-height: 1.45;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DirectorLanPlanSummary, DirectorMaterialSyncProgress } from '../shared/types'
+import { isDirectorShootingPlan } from '../lib/directorPlanSync'
 import { toast } from '../ui/toast'
 
 export function useDirectorMaterialSync(active: boolean, enabled: boolean, endpoint: string | null,
@@ -33,7 +34,7 @@ export function useDirectorMaterialSync(active: boolean, enabled: boolean, endpo
       if (running.current || disposed) return
       running.current = true
       try {
-        const plans = await window.luna.directorLab.listLocalPlans()
+        const plans = (await window.luna.directorLab.listLocalPlans()).filter(isDirectorShootingPlan)
         if (!disposed) refresh(plans)
         if (enabled && endpoint) {
           const remotePlanIds = plans.length

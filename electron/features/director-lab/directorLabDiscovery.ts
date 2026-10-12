@@ -29,6 +29,7 @@ interface DiscoveryPayload {
   api_version?: unknown
   name?: unknown
   port?: unknown
+  device_id?: unknown
 }
 
 function ipv4ToInt(value: string): number | null {
@@ -85,6 +86,8 @@ function serviceFromPayload(
   if (!Number.isInteger(port) || port < 1 || port > 65_535) return null
   return {
     id: `${host}:${port}`,
+    ...(typeof payload.device_id === 'string' && /^luna-mobile-[A-Za-z0-9_-]{20,40}$/.test(payload.device_id)
+      ? { deviceId: payload.device_id } : {}),
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Luna咔',
     host,
     port,
