@@ -26,7 +26,15 @@ function orderedClips(clips: EditProjectClip[]): EditProjectClip[] {
 type EditingSyncState = 'offline' | 'syncing' | 'synced' | 'conflict' | 'error'
 type EditingSyncBaseline = { revision: number; signature: string }
 const DIRECTOR_ENDPOINT_KEY = 'luna.director-lab.endpoint'
+const DIRECTOR_PAIRED_KEY = 'luna.director-lab.paired'
 const EDITING_SYNC_BASELINE_KEY = 'luna.ai-editing.sync-baselines'
+
+async function hasPairingForEndpoint(endpoint: string): Promise<boolean> {
+  if (localStorage.getItem(DIRECTOR_PAIRED_KEY) !== 'true') return false
+  const paired = await window.luna.lunaKaHttpClient.hasPairing(endpoint).catch(() => false)
+  if (!paired) localStorage.removeItem(DIRECTOR_PAIRED_KEY)
+  return paired
+}
 
 function readEditingSyncBaselines(): Record<string, EditingSyncBaseline> {
   try {
@@ -174,9 +182,12 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
     setWatermarks(listedWatermarks)
   }, [projectIndexOnly])
 
-  const syncProjectToPhone = useCallback(async (localProject: LunaEditProject): Promise<void> => {
+  const syncProjectToPhone = useCallback(async (
+    localProject: LunaEditProject,
+    pairingAlreadyChecked = false,
+  ): Promise<void> => {
     const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
-    if (!endpoint) {
+    if (!endpoint || (!pairingAlreadyChecked && !await hasPairingForEndpoint(endpoint))) {
       setSyncState('offline')
       return
     }
@@ -255,7 +266,8 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
 
   const syncRemoteProjectsFromPhone = useCallback(async (): Promise<boolean> => {
     const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
-    if (!endpoint || syncingRemoteProjectsRef.current) return false
+    if (!endpoint || localStorage.getItem(DIRECTOR_PAIRED_KEY) !== 'true'
+      || syncingRemoteProjectsRef.current) return false
     syncingRemoteProjectsRef.current = true
     try {
       const origin = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `http://${endpoint}`).origin
@@ -347,12 +359,13 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
   }, [dirty, project, refresh])
 
   const syncLocalProjectsToPhone = useCallback(async (): Promise<void> => {
-    if (!localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()) return
+    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
+    if (!endpoint || !await hasPairingForEndpoint(endpoint)) return
     const foundConflict = await syncRemoteProjectsFromPhone()
     const localProjects = await window.luna.aiEditor.project.list()
     for (const summary of localProjects) {
       const { project: localProject } = await window.luna.aiEditor.project.load(summary.projectId)
-      await syncProjectToPhone(localProject)
+      await syncProjectToPhone(localProject, true)
     }
     if (foundConflict) setSyncState('conflict')
   }, [syncProjectToPhone, syncRemoteProjectsFromPhone])

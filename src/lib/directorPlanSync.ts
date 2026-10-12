@@ -22,7 +22,14 @@ export function isDirectorShootingPlan(plan: DirectorLanPlanSummary): boolean {
 function stablePlanContent(plan: DirectorLanPlanSummary) {
   return {
     title: plan.title,
+    ...(plan.kind !== undefined ? { kind: plan.kind } : {}),
     ...(plan.main_content ? { mainContent: plan.main_content } : {}),
+    ...(plan.rough_cut !== undefined ? { roughCut: plan.rough_cut } : {}),
+    ...(plan.rough_cut_bpm !== undefined ? { roughCutBpm: plan.rough_cut_bpm } : {}),
+    ...(plan.rough_cut_music_enabled !== undefined
+      ? { roughCutMusicEnabled: plan.rough_cut_music_enabled } : {}),
+    ...(plan.rough_cut_takes !== undefined ? { roughCutTakes: plan.rough_cut_takes } : {}),
+    ...(plan.rough_cut_ranges !== undefined ? { roughCutRanges: plan.rough_cut_ranges } : {}),
     attributes: (plan.attributes ?? DIRECTOR_PLAN_ATTRIBUTES).map((attribute) => ({
       id: attribute.id,
       name: attribute.name,
@@ -119,7 +126,14 @@ export function buildDirectorPlanUpdate(
   return {
     expected_revision: expectedRevision,
     title: plan.title,
+    ...(plan.kind !== undefined ? { kind: plan.kind } : {}),
     main_content: plan.main_content ?? '',
+    ...(plan.rough_cut !== undefined ? { rough_cut: plan.rough_cut } : {}),
+    ...(plan.rough_cut_bpm !== undefined ? { rough_cut_bpm: plan.rough_cut_bpm } : {}),
+    ...(plan.rough_cut_music_enabled !== undefined
+      ? { rough_cut_music_enabled: plan.rough_cut_music_enabled } : {}),
+    ...(plan.rough_cut_takes !== undefined ? { rough_cut_takes: plan.rough_cut_takes } : {}),
+    ...(plan.rough_cut_ranges !== undefined ? { rough_cut_ranges: plan.rough_cut_ranges } : {}),
     attributes: plan.attributes,
     shots,
   }

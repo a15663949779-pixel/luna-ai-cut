@@ -18,6 +18,7 @@ export interface LunaKaChannelStatusEvent {
 }
 
 export interface LunaKaHttpClientApi {
+  hasPairing(endpoint?: string): Promise<boolean>
   connect(endpoint: string): Promise<void>
   pair(endpoint: string, pairingCode: string): Promise<{ deviceId: string }>
   request<T>(endpoint: string, path: string, options?: LunaKaHttpRequestOptions): Promise<T>

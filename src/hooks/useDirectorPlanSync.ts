@@ -7,7 +7,6 @@ import {
   directorPlanRevision,
   directorPlanHasSameShots,
   nextDirectorPlanBaseline,
-  isDirectorShootingPlan,
   type DirectorPlanSyncBaseline,
 } from '../lib/directorPlanSync'
 import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
@@ -30,6 +29,7 @@ interface UseDirectorPlanSyncOptions {
   setPlanWritePending: (planId: string, pending: boolean) => void
   getPlanSchema: () => DirectorPlanSchema
   onConflict: (plan: DirectorLanPlanSummary) => void
+  onAuthorizationRequired: (error: unknown) => boolean
 }
 
 function originForEndpoint(endpoint: string): string | null {
@@ -50,6 +50,7 @@ export function useDirectorPlanSync({
   setPlanWritePending,
   getPlanSchema,
   onConflict,
+  onAuthorizationRequired,
 }: UseDirectorPlanSyncOptions) {
   const [status, setStatus] = useState<DirectorPlanSyncStatus>(enabled && endpoint ? 'idle' : 'offline')
   const baselinesRef = useRef(new Map<string, DirectorPlanSyncBaseline>())
@@ -99,7 +100,7 @@ export function useDirectorPlanSync({
           requestRemotePlans(),
           window.luna.directorLab.listLocalPlans().catch((): DirectorLanPlanSummary[] => []),
         ])
-        const initialLocalPlans = allLocalPlans.filter(isDirectorShootingPlan)
+        const initialLocalPlans = allLocalPlans
         if (!mountedRef.current || endpointRef.current !== activeEndpoint) return
 
         const removedIds = new Set(await window.luna.directorLab.reconcilePlanDeletions(
@@ -300,6 +301,7 @@ export function useDirectorPlanSync({
           setStatus(hasConflict || nextConflicts.size ? 'conflict' : failures.length ? 'error' : 'synced')
         }
       } catch (error) {
+        onAuthorizationRequired(error)
         if (mountedRef.current) {
           setWriteFailures(failuresRef.current.entries())
           setStatus(isPermanentDirectorPlanWriteError(error) ? 'error' : 'offline')
@@ -371,6 +373,7 @@ export function useDirectorPlanSync({
     mergeLocalPlans,
     mergeRemotePlans,
     onConflict,
+    onAuthorizationRequired,
     requestRemotePlans,
     setPlanWritePending,
     getPlanSchema,

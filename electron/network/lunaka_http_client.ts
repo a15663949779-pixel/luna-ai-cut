@@ -68,6 +68,10 @@ export class LunaKaHttpClient {
   }
 
   register(): void {
+    ipcMain.handle('luna-ka-http-client:has-pairing', (_event, endpoint: unknown) => {
+      if (endpoint !== undefined && typeof endpoint !== 'string') return false
+      return this.hasPairing(endpoint as string | undefined)
+    })
     ipcMain.handle('luna-ka-http-client:connect', (_event, endpoint: unknown) => {
       if (typeof endpoint !== 'string') throw new Error('手机地址无效')
       return this.connect(endpoint)
@@ -103,6 +107,27 @@ export class LunaKaHttpClient {
       if (this.connectionTasks.get(base.origin) === task) {
         this.connectionTasks.delete(base.origin)
       }
+    }
+  }
+
+  async hasPairing(endpoint?: string): Promise<boolean> {
+    await this.ensureLoaded()
+    if (!endpoint) return this.keysByDeviceId.size > 0 || this.keysByOrigin.size > 0
+
+    let base: URL
+    try {
+      base = this.normalizeEndpoint(endpoint)
+    } catch {
+      return false
+    }
+    try {
+      const phone = await this.readPhoneInfo(base)
+      if (phone.deviceId) {
+        return this.keysByDeviceId.has(phone.deviceId) || this.keysByOrigin.has(base.origin)
+      }
+      return this.keysByOrigin.has(base.origin)
+    } catch {
+      return false
     }
   }
 

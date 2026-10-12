@@ -49,7 +49,7 @@ export function AppNav({ activeDevice, connection, sourceMode, onChangeConnectio
             AI 选片
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => (isActive ? 'active' : '')}>
-            项目
+            AI导拍
           </NavLink>
           <NavLink to="/workspace" className={({ isActive }) => (isActive ? 'active' : '')}>
             工作台

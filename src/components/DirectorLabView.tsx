@@ -1,6 +1,6 @@
 import { useAgentChat } from './agent-chat/agentChatContext'
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Box, FileUp, FolderDown, FolderOpen, FolderSync, ListFilter, Pencil, RefreshCw, Save, Scissors, Search, Smartphone, WandSparkles, X } from 'lucide-react'
+import { useEffect } from 'react'
+import { ArrowLeft, Box, FileUp, FolderDown, FolderOpen, FolderSync, ListFilter, Pencil, RefreshCw, Save, Search, WandSparkles, X } from 'lucide-react'
 import { DirectorMaterialSyncControl } from './DirectorMaterialSyncControl'
 import { Button, IconButton, Input, LoadingIndicator, Select, Tooltip } from '../ui'
 import { DirectorMediaPreviewDialog } from './DirectorMediaPreviewDialog'
@@ -12,6 +12,7 @@ import { DirectorPlanImportDialog } from './DirectorPlanImportDialog'
 import { DirectorLabPairDialog } from './DirectorLabPairDialog'
 import { DirectorPlanMainContent } from './DirectorPlanMainContent'
 import { useDirectorLab } from '../hooks/useDirectorLab'
+import { isDirectorShootingPlan } from '../lib/directorPlanSync'
 import type { DirectorLanPlanSummary } from '../shared/types'
 import '../styles/lab.css'
 import './DirectorLabView.css'
@@ -23,7 +24,10 @@ interface DirectorLabViewProps {
   onSelectPlan?(planId: string | null): void
   onReturnToProjects?(): void
   onConnectedEndpointChange?(endpoint: string | null): void
-  onCreateEditFromPlan?(plan: DirectorLanPlanSummary): void
+  pairingOpen?: boolean
+  onPairingOpenChange?(open: boolean): void
+  refreshKey?: number
+  createPlanKey?: number
 }
 
 function formatPlanCreatedAt(value: string | null | undefined): string {
@@ -42,8 +46,8 @@ function formatPlanCreatedAt(value: string | null | undefined): string {
 
 
 export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelectPlan,
-  onReturnToProjects, onConnectedEndpointChange, onCreateEditFromPlan }: DirectorLabViewProps) {
-  const [pairingOpen, setPairingOpen] = useState(false)
+  onReturnToProjects, onConnectedEndpointChange, pairingOpen = false, onPairingOpenChange,
+  refreshKey, createPlanKey = 0 }: DirectorLabViewProps) {
   const {
     handlePlanDeleted,
     connectedEndpoint,
@@ -94,16 +98,25 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
     savePlanTitleEdit,
     openLocalPlanDirectory,
     syncStatusLabel,
+    pairingRequired,
   } = useDirectorLab(active)
+
+  const shootingPlans = plans.filter(isDirectorShootingPlan)
 
   const { setPageContext } = useAgentChat()
   useEffect(() => {
     if (selectedPlanId === undefined) return
     if (selectedPlanId === null) setActivePlanId(null)
-    else if (plans.some(plan => plan.id === selectedPlanId)) setActivePlanId(selectedPlanId)
+    else if (plans.some(plan => plan.id === selectedPlanId && isDirectorShootingPlan(plan))) setActivePlanId(selectedPlanId)
   }, [plans, selectedPlanId, setActivePlanId])
   useEffect(() => onPlansChange?.(plans), [onPlansChange, plans])
   useEffect(() => onConnectedEndpointChange?.(connectedEndpoint), [connectedEndpoint, onConnectedEndpointChange])
+  useEffect(() => {
+    if (active && pairingRequired) onPairingOpenChange?.(true)
+  }, [active, onPairingOpenChange, pairingRequired])
+  useEffect(() => {
+    if (active && createPlanKey > 0) setImportOpen(true)
+  }, [active, createPlanKey, setImportOpen])
   const contextualPlanId = active && activePlan?.local_directory ? activePlan.id : undefined
   useEffect(() => {
     setPageContext(contextualPlanId ? { directorPlanId: contextualPlanId } : {})
@@ -116,6 +129,13 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
   }, [active, refreshLocalPlans])
+
+  useEffect(() => {
+    if (!active || !refreshKey || !connectedEndpoint) return
+    void loadPlans(connectedEndpoint).then(connected => {
+      if (connected) void retrySynchronization()
+    })
+  }, [active, connectedEndpoint, loadPlans, refreshKey, retrySynchronization])
 
   return (
     <div className="lab-page lab-director-page">
@@ -144,8 +164,6 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
           <h1>拍摄计划</h1>
         </div>
         <div className="lab-director-sync-actions">
-          <Button size="compact" variant="secondary" icon={<Smartphone size={14} />}
-            onClick={() => setPairingOpen(true)}>配对手机</Button>
           {!activePlan && <Button size="compact" variant="secondary" icon={<FileUp size={15} />}
             onClick={() => setImportOpen(true)}>新建计划</Button>}
           {connectedEndpoint && (
@@ -174,22 +192,22 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
         </div>
       </header>
 
-      {loading && plans.length === 0 && (
+      {loading && shootingPlans.length === 0 && (
         <div className="lab-director-state">
           <LoadingIndicator label="正在同步导演计划" />
         </div>
       )}
 
-      {!loading && plans.length === 0 && (
+      {!loading && shootingPlans.length === 0 && (
         <div className="lab-director-state">
           <Box size={24} />
           <strong>暂无导演计划</strong>
         </div>
       )}
 
-      {!activePlan && plans.length > 0 && (
+      {!activePlan && shootingPlans.length > 0 && (
         <DirectorLabPlanList
-          plans={plans}
+          plans={shootingPlans}
           onDeleted={handlePlanDeleted}
           deletingDisabled={downloading != null || syncStatus === 'syncing'}
           onSelect={(planId) => {
@@ -312,13 +330,6 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
               >
                 AI 提示词
               </Button>
-              {onCreateEditFromPlan && <Button
-                variant="primary"
-                size="compact"
-                icon={<Scissors size={14} />}
-                disabled={downloading != null}
-                onClick={() => onCreateEditFromPlan(activePlan)}
-              >剪辑此计划</Button>}
               {activePlan.update_available && (
                 <span className="lab-update-badge">
                   <FolderSync size={13} /> 本地副本待更新
@@ -391,7 +402,7 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
       }} />
       <DirectorLabPairDialog
         open={pairingOpen}
-        onOpenChange={setPairingOpen}
+        onOpenChange={onPairingOpenChange ?? (() => undefined)}
         onPaired={async (endpoint) => {
           const connected = await loadPlans(endpoint)
           if (connected) await retrySynchronization()

@@ -1,6 +1,6 @@
 # AI 导拍与剪辑领域
 
-页面入口为 `src/pages/ProjectsPage.tsx`，提供统一的“项目”列表，按类型管理拍摄计划与剪辑工程；项目详情仍由 `director-lab` 和 AI 剪辑工作区分别负责。拍摄计划目录中的本地素材进入 AI 剪辑共享素材目录，并通过稳定 `mediaId` 引用。全局 Agent 面板仍是唯一聊天界面。
+页面入口为 `src/pages/ProjectsPage.tsx`，桌面端“AI导拍”列表只展示拍摄计划，不创建或编辑剪辑工程，也不把 `footage` 计划绑定为剪辑工程。`footage` 计划的粗剪和素材引用数据仍通过计划协议同步，剪辑工程及素材标注元数据通过独立协议与移动端同步；桌面端暂不提供剪辑编辑入口。全局 Agent 面板仍是唯一聊天界面。
 
 - `aiEditorLocalMediaService.ts`：发现本地照片/视频/音频、分配稳定 mediaId，并读取真实素材。
 - `aiEditorMediaAnalysisService.ts` / `aiEditorSpeechService.ts`：按请求抽帧、生成联络表和语音识别；调用结果只表达实际返回的观察。

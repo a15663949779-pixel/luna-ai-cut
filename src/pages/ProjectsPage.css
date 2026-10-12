@@ -172,7 +172,8 @@
 .ai-project-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #e9e9ea; font: inherit; font-size: 11px; }
 .ai-project-search input::placeholder { color: #77777d; }
 .ai-project-list { padding-top: 2px; }
-.ai-project-row { display: grid; width: 100%; min-height: 74px; grid-template-columns: 42px minmax(180px, 1fr) minmax(210px, 270px) 20px; align-items: center; gap: 14px; border: 0; border-bottom: 1px solid #363639; padding: 10px 12px; background: transparent; color: #e9e9ea; text-align: left; cursor: pointer; transition: background .14s ease; }
+.ai-project-row-shell { display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; border-bottom: 1px solid #363639; }
+.ai-project-row { display: grid; width: 100%; min-height: 74px; grid-template-columns: 42px minmax(180px, 1fr) minmax(210px, 270px) 20px; align-items: center; gap: 14px; border: 0; padding: 10px 12px; background: transparent; color: #e9e9ea; text-align: left; cursor: pointer; transition: background .14s ease; }
 .ai-project-row:hover { background: #29292c; }
 .ai-project-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: #2b3d53; color: #83baff; }
 .ai-project-icon.editing { background: #393342; color: #c8a9ff; }
@@ -226,7 +227,6 @@
   .ai-project-home { padding: 16px 12px 24px; }
   .ai-project-home-header { align-items: flex-start; }
   .ai-project-home-actions { flex-wrap: wrap; justify-content: flex-end; }
-  .ai-project-home-actions .ui-btn:first-child { display: none; }
   .ai-project-list-tools { align-items: flex-start; flex-direction: column-reverse; gap: 8px; margin-top: 12px; }
   .ai-project-search { width: 100%; }
   .ai-project-list-tools { justify-content: stretch; }

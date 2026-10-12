@@ -8,6 +8,16 @@ import { toast } from '../ui'
 import { normalizeEndpoint, requestPlans, requestSchema } from '../lib/directorLanPlans'
 
 const ENDPOINT_STORAGE_KEY = 'luna.director-lab.endpoint'
+const PAIRED_STORAGE_KEY = 'luna.director-lab.paired'
+
+function requiresPairing(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('请在手机设置中打开配对码')
+    || message.includes('手机配对已失效')
+    || message.includes('局域网服务尚未授权')
+    || message.includes('authorization-required')
+    || message.includes('HTTP 401')
+}
 
 export function useDirectorLab(active: boolean) {
   const [connectedEndpoint, setConnectedEndpoint] = useState<string | null>(null)
@@ -28,12 +38,25 @@ export function useDirectorLab(active: boolean) {
   const [savingPlanTitle, setSavingPlanTitle] = useState(false)
   const [previewTakeId, setPreviewTakeId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasPairing, setHasPairing] = useState<boolean | null>(null)
+  const [pairingRequired, setPairingRequired] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<DirectorLabDownloadProgress | null>(null)
   const [mediaMetadata, setMediaMetadata] = useState<Record<string, DirectorLabMediaMetadata>>({})
   const metadataRequestRef = useRef(0)
   const pendingWritePlanIdsRef = useRef(new Set<string>())
   const discoveryTaskRef = useRef<Promise<boolean> | null>(null)
+
+  const requirePairing = useCallback((error: unknown): boolean => {
+    if (!requiresPairing(error)) return false
+    localStorage.removeItem(PAIRED_STORAGE_KEY)
+    setPairingRequired(true)
+    setConnectedEndpoint(null)
+    void window.luna.lunaKaHttpClient.hasPairing()
+      .then(setHasPairing)
+      .catch(() => setHasPairing(false))
+    return true
+  }, [])
 
   const activePlan = useMemo(
     () => plans.find((plan) => plan.id === activePlanId) ?? null,
@@ -77,14 +100,13 @@ export function useDirectorLab(active: boolean) {
   }, [activePlan, shotQuery, shotSort])
 
   const mergePlans = useCallback((remotePlans: DirectorLanPlanSummary[]): void => {
-    const shootingPlans = remotePlans.filter(isDirectorShootingPlan)
     setPlans((current) => {
       const currentById = new Map(current.map((plan) => [plan.id, plan]))
       const localById = new Map(
         current.filter((plan) => plan.local_directory).map((plan) => [plan.id, plan]),
       )
-      const remoteIds = new Set(shootingPlans.map((plan) => plan.id))
-      const mergedRemote = shootingPlans.map((remote) => {
+      const remoteIds = new Set(remotePlans.map((plan) => plan.id))
+      const mergedRemote = remotePlans.map((remote) => {
         const local = localById.get(remote.id)
         const previous = currentById.get(remote.id)
         return local
@@ -107,18 +129,23 @@ export function useDirectorLab(active: boolean) {
 
   const refreshRemotePlans = useCallback(async (): Promise<DirectorLanPlanSummary[]> => {
     if (!connectedEndpoint) return []
-    const [payload, definitions] = await Promise.all([
-      requestPlans(connectedEndpoint),
-      requestSchema(connectedEndpoint),
-    ])
-    schemaRef.current = definitions
-    setSchema(definitions)
-    const remotePlans = payload.plans.filter(isDirectorShootingPlan).map((plan) => ({
-      ...plan, remote_origin: new URL(connectedEndpoint).origin,
-    }))
-    mergePlans(remotePlans)
-    return remotePlans
-  }, [connectedEndpoint, mergePlans])
+    try {
+      const [payload, definitions] = await Promise.all([
+        requestPlans(connectedEndpoint),
+        requestSchema(connectedEndpoint),
+      ])
+      schemaRef.current = definitions
+      setSchema(definitions)
+      const remotePlans = payload.plans.map((plan) => ({
+        ...plan, remote_origin: new URL(connectedEndpoint).origin,
+      }))
+      mergePlans(remotePlans)
+      return remotePlans
+    } catch (error) {
+      requirePairing(error)
+      throw error
+    }
+  }, [connectedEndpoint, mergePlans, requirePairing])
 
   const setPlanWritePending = useCallback((planId: string, pending: boolean): void => {
     if (pending) pendingWritePlanIdsRef.current.add(planId)
@@ -174,6 +201,7 @@ export function useDirectorLab(active: boolean) {
     setPlanWritePending,
     getPlanSchema,
     onConflict: handleSyncConflict,
+    onAuthorizationRequired: requirePairing,
   })
   const ensureRemotePlans = useCallback(async (planIds: string[]): Promise<Set<string>> => {
     await synchronize()
@@ -249,8 +277,8 @@ export function useDirectorLab(active: boolean) {
         await window.luna.lunaKaHttpClient.connectChannel(connectedEndpoint)
         reconnectAttempt = 0
         void synchronize().catch(() => undefined)
-      } catch {
-        scheduleReconnect()
+      } catch (error) {
+        if (!requirePairing(error)) scheduleReconnect()
       } finally {
         connecting = false
       }
@@ -291,7 +319,7 @@ export function useDirectorLab(active: boolean) {
       unsubscribeStatus()
       void window.luna.lunaKaHttpClient.disconnectChannel(connectedEndpoint).catch(() => undefined)
     }
-  }, [active, connectedEndpoint, synchronize])
+  }, [active, connectedEndpoint, requirePairing, synchronize])
 
   const loadPlans = useCallback(async (value: string): Promise<boolean> => {
     if (!active) return false
@@ -309,21 +337,25 @@ export function useDirectorLab(active: boolean) {
       ])
       schemaRef.current = definitions
       setSchema(definitions)
-      const shootingPlans = payload.plans.filter(isDirectorShootingPlan)
-      mergePlans(shootingPlans)
+      const allPlans = payload.plans
+      mergePlans(allPlans)
       setConnectedEndpoint(normalized)
-      setActivePlanId((current) => shootingPlans.some((plan) => plan.id === current)
+      setActivePlanId((current) => allPlans.some((plan) => plan.id === current && isDirectorShootingPlan(plan))
         ? current
         : null)
       localStorage.setItem(ENDPOINT_STORAGE_KEY, normalized)
+      localStorage.setItem(PAIRED_STORAGE_KEY, 'true')
+      setHasPairing(true)
+      setPairingRequired(false)
       return true
-    } catch {
+    } catch (error) {
       setConnectedEndpoint(null)
+      requirePairing(error)
       return false
     } finally {
       setLoading(false)
     }
-  }, [active, mergePlans])
+  }, [active, mergePlans, requirePairing])
 
   const discover = useCallback(async (): Promise<boolean> => {
     if (!active) return false
@@ -333,7 +365,9 @@ export function useDirectorLab(active: boolean) {
       try {
         const result = await window.luna.directorLab.discover()
         for (const service of result.services) {
+          if (!await window.luna.lunaKaHttpClient.hasPairing(service.baseUrl)) continue
           if (await loadPlans(service.baseUrl)) return true
+          if (!await window.luna.lunaKaHttpClient.hasPairing()) return false
         }
         return false
       } catch {
@@ -353,19 +387,41 @@ export function useDirectorLab(active: boolean) {
   useEffect(() => {
     if (!active) return
     let canceled = false
-    void refreshLocalPlans().then((local) => {
+    localStorage.removeItem(PAIRED_STORAGE_KEY)
+    void Promise.all([
+      refreshLocalPlans(),
+      window.luna.lunaKaHttpClient.hasPairing(),
+    ]).then(([local, paired]) => {
       if (canceled) return
       if (local.length > 0) {
         setPlans(local)
       }
       const saved = localStorage.getItem(ENDPOINT_STORAGE_KEY)
+      setHasPairing(paired)
+      if (!paired) {
+        localStorage.removeItem(PAIRED_STORAGE_KEY)
+        setPairingRequired(true)
+        setLoading(false)
+        return
+      }
       if (saved) {
-        void loadPlans(saved).then((connected) => {
-          if (!canceled && !connected) void discover()
+        void window.luna.lunaKaHttpClient.hasPairing(saved).then((endpointPaired) => {
+          if (canceled) return
+          if (endpointPaired) {
+            void loadPlans(saved).then((connected) => {
+              if (!canceled && !connected && localStorage.getItem(PAIRED_STORAGE_KEY) === 'true') {
+                void discover()
+              }
+            })
+          } else {
+            void discover()
+          }
         })
-      } else if (!canceled) {
+      } else {
         void discover()
       }
+    }).catch(() => {
+      if (!canceled) setLoading(false)
     })
     return () => {
       canceled = true
@@ -373,11 +429,11 @@ export function useDirectorLab(active: boolean) {
   }, [active, discover, loadPlans, refreshLocalPlans])
 
   useEffect(() => {
-    if (!active || syncStatus !== 'offline') return
+    if (!active || syncStatus !== 'offline' || hasPairing !== true) return
     void discover()
     const timer = window.setInterval(() => void discover(), 12_000)
     return () => window.clearInterval(timer)
-  }, [active, discover, syncStatus])
+  }, [active, discover, hasPairing, syncStatus])
 
   async function download(
     key: string,
@@ -525,6 +581,7 @@ export function useDirectorLab(active: boolean) {
       setEditingPlanTitle(false)
     },
     connectedEndpoint,
+    pairingRequired,
     schema,
     importOpen,
     setImportOpen,
