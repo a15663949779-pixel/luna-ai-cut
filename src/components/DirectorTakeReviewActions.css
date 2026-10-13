@@ -1,0 +1,54 @@
+.director-take-review-rail {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.director-take-review-rail .is-active { color: var(--blue); }
+
+.director-review-point-icon { display: grid; position: relative; place-items: center; }
+.director-review-point-icon > svg:last-child {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  padding: 1px;
+  border-radius: 50%;
+  color: var(--blue);
+  background: var(--tile-dark);
+}
+
+.director-take-review-comments {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(70%, 520px);
+  max-height: 30%;
+  overflow: auto;
+}
+
+.director-take-review-comments button {
+  display: flex;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted-dark);
+  background: rgb(0 0 0 / 64%);
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+}
+
+.director-take-review-comments button:not(:disabled) { cursor: pointer; }
+.director-take-review-comments button > span:first-child { color: var(--blue); flex: none; }
+.director-take-review-comments button > span:last-child { overflow-wrap: anywhere; }

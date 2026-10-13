@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Clock3 } from 'lucide-react'
 import type { DirectorLanShot, DirectorLanTake } from '../shared/types'
 import { normalizeDirectorShotFields } from '../lib/directorShotFields'
@@ -14,11 +14,9 @@ interface Props {
   onSelect: (take: DirectorLanTake) => void
   onAddMaterials: () => void
   onDeleteMaterial?: (take: DirectorLanTake) => Promise<void>
-  children?: ReactNode
-  markerPanel?: ReactNode
 }
 
-export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, onSelect, onAddMaterials, onDeleteMaterial, children, markerPanel }: Props) {
+export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, onSelect, onAddMaterials, onDeleteMaterial }: Props) {
   const [deleteCandidate, setDeleteCandidate] = useState<DirectorLanTake | null>(null)
   const [deleting, setDeleting] = useState(false)
   const deleteMaterial = async () => {
@@ -36,10 +34,8 @@ export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, 
       <span>{field.name}</span><p>{field.description}</p>
     </section>)}
     {fields.remark && <section className="lab-viewer-shot-section"><span>备注</span><p>{fields.remark}</p></section>}
-    {markerPanel}
     <DirectorTakeList takes={takes} selectedId={selectedId} disabled={disabled || deleting} onSelect={onSelect} onAddMaterials={onAddMaterials}
       onDelete={onDeleteMaterial ? setDeleteCandidate : undefined} />
-    {children}
   </aside>
     <Dialog open={Boolean(deleteCandidate)} title="删除本地素材？" tone="dark" onOpenChange={open => !open && !deleting && setDeleteCandidate(null)}
       description="确认后将删除本地素材文件，无法还原。手机端原素材不受影响。" showCloseButton={!deleting}

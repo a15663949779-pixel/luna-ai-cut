@@ -3,6 +3,7 @@ import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { DirectorLabDownloadPlanRequest, DirectorLabProbeRequest, DirectorLabMediaMetadata, DirectorLanPlanAttribute } from '../../../src/shared/types/directorLab.ts'
 import { validateDirectorTakeMarkers } from '../../../src/lib/directorTakeMarkers.ts'
+import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from '../../../src/lib/directorTakeReview.ts'
 import { directorPlanContentSignature } from '../../../src/lib/directorPlanSync.ts'
 import { legacyShotAttribute } from './directorLabPlanStorage.ts'
 
@@ -20,6 +21,7 @@ interface LocalManifestMedia {
   available?: unknown
   selected_range?: unknown
   markers?: unknown
+  review?: unknown
   location?: Record<string, unknown> | null
   source_camera_path?: string | null
 }
@@ -161,6 +163,7 @@ async function localPlanFromManifest(manifestPath: string, probeMediaOne?: (requ
           location: item.location,
           source_camera_path: item.source_camera_path,
           markers: Array.isArray(item.markers) ? validateDirectorTakeMarkers(item.markers) : [],
+          review: item.review == null ? EMPTY_DIRECTOR_TAKE_REVIEW : validateDirectorTakeReview(item.review),
           kind: item.type === 'photo' ? 'photo' as const : 'video' as const,
           created_at: typeof item.created_at === 'string'
             ? item.created_at

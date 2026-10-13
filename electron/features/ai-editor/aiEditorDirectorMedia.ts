@@ -12,7 +12,6 @@ export function directorMediaCandidates(plans: readonly DirectorLanPlanSummary[]
       shotOrder: shot.order, shotName: shot.name, attributes: shot.attributes,
       remark: shot.remark, suggestedDurationMs: shot.duration_ms,
       recipe: shot.shot_recipe, takeId: take.id, selectedRange: take.selected_range,
-      markers: take.markers ?? [],
     }
     const capturedAt = take.captured_at ?? take.created_at
     return [{ filePath: path.resolve(take.stream_path), name: take.file_name,

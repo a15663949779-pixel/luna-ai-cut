@@ -77,8 +77,14 @@ const lunaApi: LunaApi & { exportTask: LunaExportTaskApi } = {
     hasPairing: (endpoint?: string) => ipcRenderer.invoke('luna-ka-http-client:has-pairing', endpoint),
     connect: (endpoint: string) => ipcRenderer.invoke('luna-ka-http-client:connect', endpoint),
     pair: (endpoint: string, code: string) => ipcRenderer.invoke('luna-ka-http-client:pair', endpoint, code),
-    request: <T,>(endpoint: string, requestPath: string, options?: LunaKaHttpRequestOptions) =>
-      ipcRenderer.invoke('luna-ka-http-client:request', endpoint, requestPath, options) as Promise<T>,
+    request: async <T,>(endpoint: string, requestPath: string, options?: LunaKaHttpRequestOptions): Promise<T> => {
+      const result: unknown = await ipcRenderer.invoke('luna-ka-http-client:request', endpoint, requestPath, options)
+      if (result && typeof result === 'object' && '__lunaKaHttpClientError' in result
+        && typeof result.__lunaKaHttpClientError === 'string') {
+        throw new Error(result.__lunaKaHttpClientError)
+      }
+      return result as T
+    },
     connectChannel: (endpoint: string) => ipcRenderer.invoke('luna-ka-http-client:channel:connect', endpoint),
     sendChannelMessage: (endpoint: string, message: unknown) =>
       ipcRenderer.invoke('luna-ka-http-client:channel:send', endpoint, message),

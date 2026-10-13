@@ -17,9 +17,9 @@ export function buildDirectorAiPrompt(plan: DirectorLanPlanSummary): string {
     '',
     'manifest.json 数据结构：',
     '- shots 是镜头数组；每个镜头包含 id、order、name、attributes、remark、action_guidance、subtitle、visual_description、duration_ms、shot_recipe 和 media 等字段。',
-    '- 每个镜头的 media 是素材数组，包含 id、file_name、type、location、source_camera_path、created_at、captured_at、duration_ms、width、height、codec、path、available、selected_range 和 markers 等字段。',
+    '- 每个镜头的 media 是素材数组，包含 id、file_name、type、location、source_camera_path、created_at、captured_at、duration_ms、width、height、codec、path、available、selected_range 和 review 等字段。',
     '- media.path 是相对素材目录的文件路径；path 为 null 或 available 为 false 表示本地素材不可用。',
-    '- selected_range.start_ms/end_ms 和 markers.start_ms/end_ms 使用毫秒，时间对应原素材时间轴；selected_range.note 是片段备注，markers[].text 是亮点标签。',
+    '- selected_range.start_ms/end_ms 使用毫秒，时间对应原素材时间轴；review 保存素材点赞、评论和原素材时间点的互动。',
     '- 素材技术信息包括类型、文件名、来源路径、创建和拍摄时间、时长、画面尺寸及编码格式；具体值以 manifest.json 为准。',
   ].join('\n')
 }

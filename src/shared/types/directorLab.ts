@@ -218,6 +218,20 @@ export interface DirectorTakeMarker {
   text: string
 }
 
+export interface DirectorTakeMomentReview {
+  id: string
+  time_ms: number
+  liked: boolean
+  comment: string
+}
+
+export interface DirectorTakeReview {
+  liked: boolean
+  comment: string
+  updated_at?: string
+  moments: DirectorTakeMomentReview[]
+}
+
 export interface DirectorLanTake {
   id: string
   kind: 'photo' | 'video'
@@ -235,6 +249,7 @@ export interface DirectorLanTake {
   available: boolean
   selected_range: { start_ms: number; end_ms: number; note?: string } | null
   markers?: DirectorTakeMarker[]
+  review?: DirectorTakeReview
   stream_path: string | null
   stream_url: string | null
   download_path: string | null

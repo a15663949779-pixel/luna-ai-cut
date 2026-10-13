@@ -84,11 +84,25 @@ export class LunaKaHttpClient {
     })
     ipcMain.handle(
       'luna-ka-http-client:request',
-      (_event, endpoint: unknown, requestPath: unknown, options: unknown) => {
+      async (_event, endpoint: unknown, requestPath: unknown, options: unknown) => {
         if (typeof endpoint !== 'string' || typeof requestPath !== 'string') {
           throw new Error('请求地址无效')
         }
-        return this.request(endpoint, requestPath, this.validateOptions(options))
+        try {
+          return await this.request(endpoint, requestPath, this.validateOptions(options))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (message.includes('请在手机设置中打开配对码')
+            || message.includes('手机配对已失效')
+            || message.includes('局域网服务尚未授权')) {
+            // Resolve an IPC error value so Electron does not log the same
+            // expected pairing state on every background sync poll. The
+            // preload bridge rethrows it in the renderer, where pairing UI
+            // handles it as a normal state transition.
+            return { __lunaKaHttpClientError: message }
+          }
+          throw error
+        }
       },
     )
     this.webSocketChannel.register()

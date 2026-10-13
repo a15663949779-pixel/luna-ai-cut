@@ -1,5 +1,5 @@
 import type { DirectorLanPlanSummary, DirectorLanTake } from '../shared/types/directorLab.ts'
-import { validateDirectorTakeMarkers } from './directorTakeMarkers.ts'
+import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from './directorTakeReview.ts'
 
 export type DirectorTakeRange = DirectorLanTake['selected_range']
 
@@ -30,13 +30,14 @@ export function directorPlanWithTakeRange(plan: DirectorLanPlanSummary, takeId: 
 export function assertDirectorTakeRangesSaved(requested: DirectorLanPlanSummary, saved: DirectorLanPlanSummary): void {
   const savedTakes = new Map(saved.shots.flatMap(shot => shot.takes).map(take => [take.id, take]))
   for (const take of requested.shots.flatMap(shot => shot.takes)) {
-    if (take.kind !== 'video' || requested.pending_take_ids?.includes(take.id) || requested.deleted_local_take_ids?.includes(take.id)) continue
+    if (requested.pending_take_ids?.includes(take.id) || requested.deleted_local_take_ids?.includes(take.id)) continue
     const actual = savedTakes.get(take.id)
-    if (!actual || JSON.stringify(validateDirectorTakeRange(actual.selected_range)) !== JSON.stringify(validateDirectorTakeRange(take.selected_range))) {
+    if (!actual || (take.kind === 'video' && JSON.stringify(validateDirectorTakeRange(actual.selected_range)) !== JSON.stringify(validateDirectorTakeRange(take.selected_range)))) {
       throw new Error('手机未保存片段标记，请更新手机端后重试')
     }
-    if (JSON.stringify(validateDirectorTakeMarkers(actual.markers ?? [])) !== JSON.stringify(validateDirectorTakeMarkers(take.markers ?? []))) {
-      throw new Error('手机未保存亮点标签，请更新手机端后重试')
+    if (JSON.stringify(validateDirectorTakeReview(actual.review ?? EMPTY_DIRECTOR_TAKE_REVIEW))
+      !== JSON.stringify(validateDirectorTakeReview(take.review ?? EMPTY_DIRECTOR_TAKE_REVIEW))) {
+      throw new Error('手机未保存素材评论，请更新手机端后重试')
     }
   }
 }

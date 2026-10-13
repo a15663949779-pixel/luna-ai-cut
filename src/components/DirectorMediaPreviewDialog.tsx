@@ -5,8 +5,8 @@ import { DirectorVideoRangeEditor } from './DirectorVideoRangeEditor'
 import { directorPreviewPath } from '../lib/directorMediaSource'
 import { directorPlanWithTakeRange, type DirectorTakeRange } from '../lib/directorTakeRange'
 import { directorPlanContentSignature } from '../lib/directorPlanSync'
-import { directorPlanWithTakeMarkers } from '../lib/directorTakeMarkers'
-import type { DirectorTakeMarker } from '../shared/types/directorLab'
+import { directorPlanWithTakeReview } from '../lib/directorTakeReview'
+import type { DirectorTakeReview } from '../shared/types/directorLab'
 import './DirectorMediaPreviewDialog.css'
 
 interface DirectorMediaPreviewDialogProps {
@@ -79,9 +79,9 @@ export function DirectorMediaPreviewDialog({ plan, onLocalPlanChange, onWriteSta
       }
     } finally { onWriteStateChange(plan.id, false) }
   }
-  const saveMarkers = async (markers: DirectorTakeMarker[]) => {
+  const saveReview = async (review: DirectorTakeReview) => {
     const expected = plan.local_content_signature ?? directorPlanContentSignature(plan)
-    const next = directorPlanWithTakeMarkers(plan, take.id, markers)
+    const next = directorPlanWithTakeReview(plan, take.id, review)
     onWriteStateChange(plan.id, true)
     try {
       const saved = await window.luna.directorLab.saveLocalPlan({ ...next,
@@ -90,6 +90,6 @@ export function DirectorMediaPreviewDialog({ plan, onLocalPlanChange, onWriteSta
     } finally { onWriteStateChange(plan.id, false) }
   }
   return <DirectorVideoRangeEditor take={take} shot={shot} takes={takes} source={source}
-    onSave={saveRange} onSelectTake={onSelectTake} onClose={onClose} phoneConnected={phoneConnected}
-    adding={adding} onAddMaterials={() => void addMaterials()} onDeleteMaterial={deleteMaterial} onSaveMarkers={saveMarkers} />
+    onSave={saveRange} onSaveReview={saveReview} onSelectTake={onSelectTake} onClose={onClose} phoneConnected={phoneConnected}
+    adding={adding} onAddMaterials={() => void addMaterials()} onDeleteMaterial={deleteMaterial} />
 }

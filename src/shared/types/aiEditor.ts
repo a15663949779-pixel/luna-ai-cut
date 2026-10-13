@@ -25,7 +25,6 @@ export interface AiEditorDirectorContext {
   recipe?: DirectorLanShot['shot_recipe']
   takeId: string
   selectedRange: DirectorLanTake['selected_range']
-  markers: DirectorLanTake['markers']
 }
 
 export interface AiEditorLocalMedia {

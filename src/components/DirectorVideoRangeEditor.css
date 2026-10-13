@@ -54,14 +54,10 @@
 
 .director-range-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  grid-template-columns: repeat(2, auto);
+  justify-content: end;
   align-items: center;
   gap: 8px;
-}
-
-.director-range-actions > .ui-input {
-  min-width: 0;
-  min-height: 44px;
 }
 
 .director-range-actions > .ui-btn {

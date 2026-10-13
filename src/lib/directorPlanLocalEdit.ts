@@ -2,6 +2,7 @@ import type { DirectorLanPlanSummary } from '../shared/types/directorLab.ts'
 import { directorPlanContentSignature } from './directorPlanSync.ts'
 import { validateDirectorTakeRange } from './directorTakeRange.ts'
 import { validateDirectorTakeMarkers } from './directorTakeMarkers.ts'
+import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from './directorTakeReview.ts'
 
 export function directorLocalEditHasConflict(current: DirectorLanPlanSummary,
   requested: DirectorLanPlanSummary, expectedSignature?: string): boolean {
@@ -28,7 +29,9 @@ export function applyDirectorLocalPlanEdit(current: DirectorLanPlanSummary, plan
       const requested = shot.takes?.find(item => item.id === take.id)
       return requested && take.kind === 'video'
         ? { ...take, selected_range: validateDirectorTakeRange(requested.selected_range, take.duration_ms),
-          markers: requested.markers === undefined ? take.markers ?? [] : validateDirectorTakeMarkers(requested.markers, take.duration_ms) }
+          markers: requested.markers === undefined ? take.markers ?? [] : validateDirectorTakeMarkers(requested.markers, take.duration_ms),
+          review: requested.review === undefined ? validateDirectorTakeReview(take.review ?? EMPTY_DIRECTOR_TAKE_REVIEW)
+            : validateDirectorTakeReview(requested.review) }
         : take
     }) }))
   return { ...current, title: plan.title, main_content: plan.main_content ?? current.main_content ?? '', shots,

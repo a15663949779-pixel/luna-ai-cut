@@ -47,7 +47,7 @@ function publicPlan(plan: DirectorLanPlanSummary) {
     shots: plan.shots.map(shot => ({ shotId: shot.id, order: shot.order, name: shot.name, durationMs: shot.duration_ms,
       attributes: shot.attributes.map(field => ({ name: field.name, description: field.description })), remark: shot.remark,
       takes: shot.takes.map(take => ({ takeId: take.id, name: take.file_name, kind: take.kind, available: take.available,
-        durationMs: take.duration_ms ?? null, selectedRange: take.selected_range, markers: take.markers ?? [] })) })),
+        durationMs: take.duration_ms ?? null, selectedRange: take.selected_range })) })),
   }
 }
 

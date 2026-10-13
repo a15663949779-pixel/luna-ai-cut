@@ -175,7 +175,7 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
               {syncStatusLabel}
             </span></Tooltip>
             {conflicts.length > 0 && <Button size="compact" onClick={() => setConflictsOpen(true)}>
-              处理冲突 ({conflicts.length})
+              {resolvingPlanId ? '正在同步所选版本' : `处理冲突 (${conflicts.length})`}
             </Button>}
             <Tooltip content="刷新导演计划">
               <IconButton

@@ -114,10 +114,13 @@ function readmeForPlan(plan: DirectorLanPlanSummary): string {
       lines.push(`- 素材 ${takeIndex + 1}（${take.kind === 'video' ? '视频' : '照片'}）：${take.available ? relativePath : '文件缺失'}`)
       if (take.selected_range) {
         lines.push(`- 选取范围：${take.selected_range.start_ms} - ${take.selected_range.end_ms} ms`)
-        if (take.selected_range.note) lines.push(`- 片段备注：${take.selected_range.note}`)
       }
-      for (const marker of take.markers ?? []) {
-        lines.push(`- 亮点标签：${marker.start_ms}${marker.end_ms === null ? '' : ` - ${marker.end_ms}`} ms · ${marker.text}`)
+      const review = take.review
+      if (review?.liked) lines.push('- 整段点赞')
+      if (review?.comment.trim()) lines.push(`- 整段评论：${review.comment.trim()}`)
+      for (const moment of review?.moments ?? []) {
+        if (moment.liked) lines.push(`- ${moment.time_ms} ms 点赞`)
+        if (moment.comment.trim()) lines.push(`- ${moment.time_ms} ms 评论：${moment.comment.trim()}`)
       }
     })
   })
@@ -190,6 +193,7 @@ export function manifestForPlan(
         available: take.available,
         selected_range: take.selected_range,
         markers: take.markers ?? [],
+        review: take.review ?? { liked: false, comment: '', moments: [] },
       })),
     })),
   }, null, 2)
@@ -293,7 +297,7 @@ async function reconcileLocalDirectorPlanUnlocked(
       directory = existingDirectory
     }
   }
-  let manifestPath = path.join(directory, 'manifest.json')
+  const manifestPath = path.join(directory, 'manifest.json')
   let existing: ExistingManifest | null = null
   try {
     existing = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as ExistingManifest

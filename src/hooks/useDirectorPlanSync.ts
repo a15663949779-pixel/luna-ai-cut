@@ -383,6 +383,7 @@ export function useDirectorPlanSync({
     if (resolvingRef.current) throw new Error('正在处理冲突')
     resolvingRef.current = true
     setResolvingPlanId(planId)
+    setStatus('syncing')
     try {
       await syncTaskRef.current
       if (!conflictsRef.current.has(planId)) throw new Error('冲突已变化，请刷新后重试')

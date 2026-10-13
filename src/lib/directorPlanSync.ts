@@ -1,6 +1,7 @@
 import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
 import { normalizeDirectorShotFields } from './directorShotFields.ts'
 import { validateDirectorTakeMarkers } from './directorTakeMarkers.ts'
+import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from './directorTakeReview.ts'
 
 export const DIRECTOR_PLAN_ATTRIBUTES = [
   { id: 'content', name: '画面内容' },
@@ -28,8 +29,10 @@ function stablePlanContent(plan: DirectorLanPlanSummary) {
     ...(plan.rough_cut_bpm !== undefined ? { roughCutBpm: plan.rough_cut_bpm } : {}),
     ...(plan.rough_cut_music_enabled !== undefined
       ? { roughCutMusicEnabled: plan.rough_cut_music_enabled } : {}),
-    ...(plan.rough_cut_takes !== undefined ? { roughCutTakes: plan.rough_cut_takes } : {}),
-    ...(plan.rough_cut_ranges !== undefined ? { roughCutRanges: plan.rough_cut_ranges } : {}),
+    ...(plan.rough_cut_takes && Object.keys(plan.rough_cut_takes).length > 0
+      ? { roughCutTakes: plan.rough_cut_takes } : {}),
+    ...(plan.rough_cut_ranges && Object.keys(plan.rough_cut_ranges).length > 0
+      ? { roughCutRanges: plan.rough_cut_ranges } : {}),
     attributes: (plan.attributes ?? DIRECTOR_PLAN_ATTRIBUTES).map((attribute) => ({
       id: attribute.id,
       name: attribute.name,
@@ -45,6 +48,9 @@ function stablePlanContent(plan: DirectorLanPlanSummary) {
       ...(shot.takes.some(take => take.markers?.length) ? { takeMarkers: shot.takes.filter(take => take.markers?.length)
         .map(take => ({ id: take.id, markers: validateDirectorTakeMarkers(take.markers) })) } : {}),
       ...(shot.takes.some(take => take.selected_range) ? { takeRanges: shot.takes.filter(take => take.selected_range).map(take => ({ id: take.id, selectedRange: take.selected_range })) } : {}),
+      ...(shot.takes.some(take => take.review && (take.review.updated_at || take.review.liked || take.review.comment || take.review.moments.length))
+        ? { takeReviews: shot.takes.filter(take => take.review).map(take => ({ id: take.id, review: validateDirectorTakeReview(take.review) })) }
+        : {}),
       attributes: shot.attributes.map((attribute) => ({
         id: attribute.id,
         name: attribute.name,
@@ -118,9 +124,15 @@ export function buildDirectorPlanUpdate(
       action_guidance: shot.action_guidance ?? '',
       subtitle: shot.subtitle ?? '',
       ...(shot.shot_recipe !== undefined ? { shot_recipe: shot.shot_recipe } : {}),
-      ...(includeTakeRanges ? { take_ranges: shot.takes.filter(take => take.kind === 'video' && !plan.pending_take_ids?.includes(take.id)
-        && !plan.deleted_local_take_ids?.includes(take.id)).map(take => ({ id: take.id, selected_range: take.selected_range,
-          markers: validateDirectorTakeMarkers(take.markers ?? [], take.duration_ms) })) } : {}),
+      ...(includeTakeRanges ? { take_ranges: shot.takes.filter(take => take.kind === 'video'
+        && !plan.pending_take_ids?.includes(take.id) && !plan.deleted_local_take_ids?.includes(take.id))
+        .map(take => ({ id: take.id, selected_range: take.selected_range })) } : {}),
+      ...(shot.takes.some(take => take.review && (take.review.updated_at || take.review.liked || take.review.comment || take.review.moments.length))
+        ? { take_reviews: shot.takes.filter(take => take.review && !plan.pending_take_ids?.includes(take.id)
+          && !plan.deleted_local_take_ids?.includes(take.id)
+          && (take.review.updated_at || take.review.liked || take.review.comment || take.review.moments.length))
+          .map(take => ({ id: take.id, review: validateDirectorTakeReview(take.review) })) }
+        : {}),
     }
   })
   return {
@@ -163,7 +175,9 @@ export function overlayDirectorLocalPlan(remote: DirectorLanPlanSummary, local: 
       if (index < 0 && local.pending_take_ids?.includes(take.id)) takes.push(take)
       else if (index >= 0) takes[index] = { ...takes[index], ...(take.available && take.stream_url ? take : {}),
         selected_range: dirty ? take.selected_range : takes[index].selected_range,
-        markers: dirty ? take.markers ?? [] : takes[index].markers ?? [] }
+        markers: dirty ? take.markers ?? [] : takes[index].markers ?? [],
+        review: dirty ? validateDirectorTakeReview(take.review ?? EMPTY_DIRECTOR_TAKE_REVIEW)
+          : validateDirectorTakeReview(takes[index].review ?? EMPTY_DIRECTOR_TAKE_REVIEW) }
     }
     const visibleTakes = takes.map(take => local.deleted_local_take_ids?.includes(take.id)
       ? { ...take, available: false, stream_url: null, download_url: null, stream_path: null, download_path: null } : take)

@@ -40,6 +40,7 @@ export function useDirectorLab(active: boolean) {
   const [loading, setLoading] = useState(true)
   const [hasPairing, setHasPairing] = useState<boolean | null>(null)
   const [pairingRequired, setPairingRequired] = useState(false)
+  const [conflictsOpen, setConflictsOpen] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<DirectorLabDownloadProgress | null>(null)
   const [mediaMetadata, setMediaMetadata] = useState<Record<string, DirectorLabMediaMetadata>>({})
@@ -156,8 +157,8 @@ export function useDirectorLab(active: boolean) {
   const isPlanWritePending = useCallback((planId: string): boolean =>
     pendingWritePlanIdsRef.current.has(planId), [])
 
-  const handleSyncConflict = useCallback((plan: DirectorLanPlanSummary): void => {
-    toast.error(`“${plan.title}”两端都有新修改，已保留本地副本`)
+  const handleSyncConflict = useCallback((): void => {
+    setConflictsOpen(true)
   }, [])
 
   useEffect(() => window.luna.directorLab.onDownloadProgress(setDownloadProgress), [])
@@ -190,7 +191,6 @@ export function useDirectorLab(active: boolean) {
     })
   }, [connectedEndpoint])
 
-  const [conflictsOpen, setConflictsOpen] = useState(false)
   const { status: syncStatus, synchronize, retrySynchronization, writeFailures, conflicts, resolvingPlanId, resolveConflict } = useDirectorPlanSync({
     enabled: active,
     endpoint: connectedEndpoint,

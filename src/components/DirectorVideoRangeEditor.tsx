@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import type { DirectorLanShot, DirectorLanTake } from '../shared/types'
 import type { DirectorTakeRange } from '../lib/directorTakeRange'
-import { Button, Dialog, Input, LoadingIndicator, toast } from '../ui'
+import { Button, Dialog, LoadingIndicator, toast } from '../ui'
 import { DirectorShotInspector } from './DirectorShotInspector'
-import { DirectorTakeMarkerPanel } from './DirectorTakeMarkerPanel'
-import { filePathToPreviewUrl } from '../lib/fileUtils'
-import type { DirectorTakeMarker } from '../shared/types/directorLab'
+import { DirectorTakeReviewActions } from './DirectorTakeReviewActions'
+import type { DirectorTakeReview } from '../shared/types/directorLab'
 import { PreviewStage, type PreviewStageHandle } from './PreviewStage'
 import { TrimStrip } from '../workspace/trim/TrimStrip'
 import { useTrimThumbnails } from '../workspace/trim/useTrimThumbnails'
@@ -19,16 +18,16 @@ interface Props {
   takes: DirectorLanTake[]
   source: () => Promise<string>
   onSave: (range: DirectorTakeRange) => Promise<void>
+  onSaveReview: (review: DirectorTakeReview) => Promise<void>
   onSelectTake: (take: DirectorLanTake) => void
   onClose: () => void
   adding: boolean
   onAddMaterials: () => void
   phoneConnected: boolean
   onDeleteMaterial: (take: DirectorLanTake) => Promise<void>
-  onSaveMarkers: (markers: DirectorTakeMarker[]) => Promise<void>
 }
 
-export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, onSelectTake, onClose, adding, onAddMaterials, phoneConnected, onDeleteMaterial, onSaveMarkers }: Props) {
+export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, onSaveReview, onSelectTake, onClose, adding, onAddMaterials, phoneConnected, onDeleteMaterial }: Props) {
   const playable = take.available && Boolean(take.stream_url)
   const isVideo = take.kind === 'video' && playable
   const stage = useRef<PreviewStageHandle>(null)
@@ -36,7 +35,6 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
   const [error, setError] = useState<string | null>(null)
   const [media, setMedia] = useState({ currentTime: 0, duration: 0, playing: false })
   const [range, setRange] = useState({ start: take.selected_range?.start_ms ?? 0, end: take.selected_range?.end_ms ?? 0 })
-  const [note, setNote] = useState(take.selected_range?.note ?? '')
   const [marked, setMarked] = useState(Boolean(take.selected_range))
   const [saving, setSaving] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
@@ -51,7 +49,11 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
   const seekFrame = useRef<number | null>(null)
   const playbackRange = useRef(range)
   const baseline = useRef(JSON.stringify(take.selected_range))
-  const selected: DirectorTakeRange = marked ? { start_ms: Math.round(range.start), end_ms: Math.round(range.end), ...(note.trim() ? { note: note.trim() } : {}) } : null
+  const selected: DirectorTakeRange = marked ? {
+    start_ms: Math.round(range.start),
+    end_ms: Math.round(range.end),
+    ...(take.selected_range?.note ? { note: take.selected_range.note } : {}),
+  } : null
   const dirty = JSON.stringify(selected) !== baseline.current
   const { thumbnails } = useTrimThumbnails({ videoPath: url, duration: media.duration })
 
@@ -62,7 +64,6 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
     setError(null)
     setMedia({ currentTime: 0, duration: 0, playing: false })
     setRange({ start: nextTake.selected_range?.start_ms ?? 0, end: nextTake.selected_range?.end_ms ?? 0 })
-    setNote(nextTake.selected_range?.note ?? '')
     setMarked(nextTake.kind === 'video' && Boolean(nextTake.selected_range))
     baseline.current = JSON.stringify(nextTake.selected_range)
     initialized.current = false
@@ -178,6 +179,10 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
           {!phoneConnected && <p role="status">手机未连接，且本地没有可用素材。请连接手机同步素材，或添加本地素材。</p>}
         </> : error ? <span role="alert">{error}</span> : !url ? <LoadingIndicator label="正在读取素材" />
           : <PreviewStage key={take.id} ref={stage} url={url} isLivePhoto={false} hideControls onPlayStateChange={setMedia} />}
+        {playable && <DirectorTakeReviewActions review={take.review} video={take.kind === 'video'}
+          positionMs={Math.round(media.currentTime * 1000)} durationMs={Math.round(media.duration * 1000)}
+          disabled={saving || adding} onPause={() => { if (stage.current?.isPlaying()) stage.current.togglePlay() }}
+          onSeek={milliseconds => seek(milliseconds / 1000)} onSave={onSaveReview} />}
       </div>
       {isVideo && <div className="director-range-controls">
         <TrimStrip duration={media.duration} startTime={range.start / 1000} endTime={range.end / 1000}
@@ -186,11 +191,9 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
           onStartTimeChange={seconds => { setRange(current => ({ ...current, start: Math.round(seconds * 1000) })); setMarked(true) }}
           onEndTimeChange={seconds => { endPreview.current = seconds; setRange(current => ({ ...current, end: Math.round(seconds * 1000) })); setMarked(true) }} />
         <div className="director-range-actions">
-          <Input variant="pill" fullWidth aria-label="片段备注" placeholder="片段备注" maxLength={4000} disabled={saving} value={note} onChange={event => { setNote(event.target.value); setMarked(true) }} />
           <Button disabled={saving || media.duration <= 0} onClick={() => applyDuration(shot.duration_ms)}>推荐时长</Button>
           <Button disabled={saving || media.duration <= 0} onClick={() => {
             setMarked(false)
-            setNote('')
             setRange({ start: 0, end: Math.round(media.duration * 1000) })
             seek(0)
           }}>还原</Button>
@@ -198,12 +201,6 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSave, on
       </div>}
       </div>
       <DirectorShotInspector shot={shot} takes={takes} selectedId={take.id} disabled={saving || adding} onAddMaterials={onAddMaterials}
-        markerPanel={isVideo && <DirectorTakeMarkerPanel key={take.id} markers={take.markers ?? []} durationMs={Math.round(media.duration * 1000)}
-          videoSource={filePathToPreviewUrl(url)}
-          range={range} disabled={saving || adding} getPosition={() => desiredSeek.current !== null && seekFrame.current !== null
-            ? desiredSeek.current * 1000 : (stage.current?.getCurrentTime() ?? media.currentTime) * 1000}
-          onPause={() => { if (stage.current?.isPlaying()) stage.current.togglePlay() }} onSave={onSaveMarkers}
-          onJump={marker => { if (marker.end_ms === null) seek(marker.start_ms / 1000); else playRange({ start: marker.start_ms, end: marker.end_ms }) }} />}
         onDeleteMaterial={onDeleteMaterial}
         onSelect={selectedTake => { if (selectedTake.id !== take.id) navigate(() => onSelectTake(selectedTake)) }} />
     </Dialog>
