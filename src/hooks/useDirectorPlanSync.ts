@@ -5,7 +5,6 @@ import {
   buildDirectorPlanUpdate,
   directorPlanContentSignature,
   directorPlanRevision,
-  directorPlanHasSameShots,
   nextDirectorPlanBaseline,
   type DirectorPlanSyncBaseline,
 } from '../lib/directorPlanSync'
@@ -404,9 +403,6 @@ export function useDirectorPlanSync({
       setPlanWritePending(planId, true)
       let selected = remote
       if (source === 'local') {
-        if (!directorPlanHasSameShots(remote, local)) {
-          throw new Error('两端镜头不同，请采用手机版本；电脑副本会先备份')
-        }
         selected = await window.luna.lunaKaHttpClient.request<DirectorLanPlanSummary>(
           endpoint, `/api/v1/director/plans/${encodeURIComponent(planId)}`, {
             method: 'PATCH',

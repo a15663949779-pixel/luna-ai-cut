@@ -3,11 +3,11 @@ import { ArrowDown, ArrowUp, Download, Film, Music2, Pause, Play, Plus, Save, Tr
 
 import type { AiEditorLocalMedia } from '../shared/types/aiEditor'
 import type { EditProjectClip, EditProjectSummary, EditProjectSource, LunaEditProject } from '../shared/types/aiEditing'
-import { toLunaEditWireProject } from '../lib/aiEditingWire'
-import { requestEditingProject, requestEditingProjects, writeEditingProject } from '../lib/editingLanProjects'
 import type { PreviewLayer } from '../shared/types/render'
 import { clipOutputDurationMs, clipSourceOffsetAtOutputMs, orderedTimelineClips } from '../shared/aiEditingTimeline'
 import { LrcRender } from '../components/LrcRender'
+import { EditingProjectSyncControls } from '../components/EditingProjectSyncControls'
+import { useLunaEditProjectSync } from '../hooks/useLunaEditProjectSync'
 import { Button, Select, toast } from '../ui'
 
 function clipDuration(clip: EditProjectClip): number {
@@ -21,37 +21,6 @@ function clock(milliseconds: number): string {
 
 function orderedClips(clips: EditProjectClip[]): EditProjectClip[] {
   return orderedTimelineClips(clips)
-}
-
-type EditingSyncState = 'offline' | 'syncing' | 'synced' | 'conflict' | 'error'
-type EditingSyncBaseline = { revision: number; signature: string }
-const DIRECTOR_ENDPOINT_KEY = 'luna.director-lab.endpoint'
-const DIRECTOR_PAIRED_KEY = 'luna.director-lab.paired'
-const EDITING_SYNC_BASELINE_KEY = 'luna.ai-editing.sync-baselines'
-
-async function hasPairingForEndpoint(endpoint: string): Promise<boolean> {
-  if (localStorage.getItem(DIRECTOR_PAIRED_KEY) !== 'true') return false
-  const paired = await window.luna.lunaKaHttpClient.hasPairing(endpoint).catch(() => false)
-  if (!paired) localStorage.removeItem(DIRECTOR_PAIRED_KEY)
-  return paired
-}
-
-function readEditingSyncBaselines(): Record<string, EditingSyncBaseline> {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(EDITING_SYNC_BASELINE_KEY) ?? '{}')
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, EditingSyncBaseline> : {}
-  } catch {
-    return {}
-  }
-}
-
-function editingSyncSignature(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(editingSyncSignature).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${editingSyncSignature(item)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
 }
 
 function previewLayers(
@@ -138,10 +107,7 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
   const [error, setError] = useState('')
   const [playheadMs, setPlayheadMs] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [syncState, setSyncState] = useState<EditingSyncState>('offline')
   const playheadRef = useRef(0)
-  const syncingProjectIdsRef = useRef(new Set<string>())
-  const syncingRemoteProjectsRef = useRef(false)
 
   useEffect(() => onProjectsChange?.(projects), [onProjectsChange, projects])
 
@@ -182,200 +148,30 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
     setWatermarks(listedWatermarks)
   }, [projectIndexOnly])
 
-  const syncProjectToPhone = useCallback(async (
-    localProject: LunaEditProject,
-    pairingAlreadyChecked = false,
-  ): Promise<void> => {
-    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
-    if (!endpoint || (!pairingAlreadyChecked && !await hasPairingForEndpoint(endpoint))) {
-      setSyncState('offline')
-      return
-    }
-    if (syncingProjectIdsRef.current.has(localProject.id)) return
-    syncingProjectIdsRef.current.add(localProject.id)
-    setSyncState('syncing')
-    const wireProject = toLunaEditWireProject(localProject)
-    const signature = editingSyncSignature(wireProject)
-    try {
-      const origin = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `http://${endpoint}`).origin
-      const baselineKey = `${origin}:${localProject.id}`
-      const baselines = readEditingSyncBaselines()
-      const baseline = baselines[baselineKey]
-      if (baseline) {
-        const remote = await requestEditingProject(endpoint, localProject.id)
-        if (remote.deleted_at) {
-          setSyncState('conflict')
-          return
-        }
-        if (remote.revision !== baseline.revision) {
-          if (remote.revision > baseline.revision && editingSyncSignature(remote.project) === signature) {
-            baselines[baselineKey] = { revision: remote.revision, signature }
-            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-            setSyncState('synced')
-            return
-          }
-          setSyncState('conflict')
-          return
-        }
-        if (baseline.signature === signature) {
-          setSyncState('synced')
-          return
-        }
-        try {
-          const saved = await writeEditingProject(endpoint, wireProject, baseline.revision)
-          baselines[baselineKey] = { revision: saved.revision, signature }
-          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          setSyncState('synced')
-          return
-        } catch (error) {
-          const remote = await requestEditingProject(endpoint, localProject.id).catch(() => null)
-          if (remote && remote.revision > baseline.revision) {
-            setSyncState('conflict')
-            toast.error(`“${localProject.name}”手机与电脑都有修改，已保留两端版本`)
-            return
-          }
-          throw error
-        }
-      }
-
-      const index = await requestEditingProjects(endpoint)
-      const existing = index.projects.find(item => item.id === localProject.id)
-      if (existing) {
-        const remote = await requestEditingProject(endpoint, localProject.id)
-        if (!remote.deleted_at && editingSyncSignature(remote.project) === signature) {
-          baselines[baselineKey] = { revision: remote.revision, signature }
-          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          setSyncState('synced')
-          return
-        }
-        setSyncState('conflict')
-        toast.error(`“${localProject.name}”手机已有同 ID 工程，已保留两端版本`)
-        return
-      }
-      const created = await writeEditingProject(endpoint, wireProject, 0)
-      baselines[baselineKey] = { revision: created.revision, signature }
-      localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-      setSyncState('synced')
-    } catch (value) {
-      setSyncState('error')
-      setError(value instanceof Error ? value.message : '剪辑工程同步失败')
-    } finally {
-      syncingProjectIdsRef.current.delete(localProject.id)
-    }
-  }, [])
-
-  const syncRemoteProjectsFromPhone = useCallback(async (): Promise<boolean> => {
-    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
-    if (!endpoint || localStorage.getItem(DIRECTOR_PAIRED_KEY) !== 'true'
-      || syncingRemoteProjectsRef.current) return false
-    syncingRemoteProjectsRef.current = true
-    try {
-      const origin = new URL(/^https?:\/\//i.test(endpoint) ? endpoint : `http://${endpoint}`).origin
-      const index = await requestEditingProjects(endpoint)
-      let localProjects = await window.luna.aiEditor.project.list()
-      let importedAny = false
-      let foundConflict = false
-      for (const summary of index.projects) {
-        if (summary.deleted) {
-          if (localProjects.some(item => item.projectId === summary.id)) foundConflict = true
-          continue
-        }
-        const remote = await requestEditingProject(endpoint, summary.id)
-        const baselineKey = `${origin}:${summary.id}`
-        const baselines = readEditingSyncBaselines()
-        const baseline = baselines[baselineKey]
-        const existingSummary = localProjects.find(item => item.projectId === summary.id)
-        const remoteSignature = editingSyncSignature(remote.project)
-        const mobileState = remote.project.extensions?.['com.luna.mobile']
-        const hasPendingPhoneVersion = Boolean(mobileState && typeof mobileState === 'object'
-          && !Array.isArray(mobileState)
-          && ('pending_native_project' in mobileState || 'pending_native_apply_error_revision' in mobileState))
-        if (hasPendingPhoneVersion && existingSummary) {
-          foundConflict = true
-          continue
-        }
-        if (hasPendingPhoneVersion) foundConflict = true
-        if (!existingSummary) {
-          const imported = await window.luna.aiEditor.project.importSynced(remote.project)
-          const localSignature = editingSyncSignature(toLunaEditWireProject(imported))
-          baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
-          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          localProjects = [...localProjects, { projectId: imported.id, projectName: imported.name,
-            createdAt: imported.createdAt, updatedAt: imported.updatedAt, revision: imported.revision,
-            clipCount: imported.clips.length }]
-          importedAny = true
-          continue
-        }
-
-        const { project: localProject } = await window.luna.aiEditor.project.load(summary.id)
-        const localSignature = editingSyncSignature(toLunaEditWireProject(localProject))
-        if (!baseline) {
-          if (localSignature === remoteSignature) {
-            baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
-            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          } else {
-            foundConflict = true
-          }
-          continue
-        }
-        if (remote.revision <= baseline.revision || localSignature === remoteSignature) {
-          if (localSignature === remoteSignature && remote.revision > baseline.revision) {
-            baselines[baselineKey] = { revision: remote.revision, signature: localSignature }
-            localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          }
-          continue
-        }
-        if (remoteSignature === baseline.signature) {
-          baselines[baselineKey] = { revision: remote.revision, signature: baseline.signature }
-          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          continue
-        }
-        const activeUnsaved = project?.id === summary.id && dirty
-        if (localSignature === baseline.signature && !activeUnsaved) {
-          const imported = await window.luna.aiEditor.project.importSynced(remote.project, localProject.revision)
-          const importedSignature = editingSyncSignature(toLunaEditWireProject(imported))
-          baselines[baselineKey] = { revision: remote.revision, signature: importedSignature }
-          localStorage.setItem(EDITING_SYNC_BASELINE_KEY, JSON.stringify(baselines))
-          if (project?.id === summary.id) {
-            setProject(imported)
-            setSelectedClipId(imported.clips[0]?.id ?? '')
-            setDirty(false)
-          }
-          importedAny = true
-        } else if (remoteSignature !== baseline.signature) {
-          foundConflict = true
-        }
-      }
-      if (importedAny) await refresh()
-      setSyncState(foundConflict ? 'conflict' : 'synced')
-      return foundConflict
-    } catch (value) {
-      setSyncState('error')
-      setError(value instanceof Error ? value.message : '剪辑工程同步失败')
-      return false
-    } finally {
-      syncingRemoteProjectsRef.current = false
-    }
-  }, [dirty, project, refresh])
-
-  const syncLocalProjectsToPhone = useCallback(async (): Promise<void> => {
-    const endpoint = localStorage.getItem(DIRECTOR_ENDPOINT_KEY)?.trim()
-    if (!endpoint || !await hasPairingForEndpoint(endpoint)) return
-    const foundConflict = await syncRemoteProjectsFromPhone()
-    const localProjects = await window.luna.aiEditor.project.list()
-    for (const summary of localProjects) {
-      const { project: localProject } = await window.luna.aiEditor.project.load(summary.projectId)
-      await syncProjectToPhone(localProject, true)
-    }
-    if (foundConflict) setSyncState('conflict')
-  }, [syncProjectToPhone, syncRemoteProjectsFromPhone])
-
-  useEffect(() => {
-    if (!active) return
-    void refresh()
-      .then(syncLocalProjectsToPhone)
-      .catch(value => setError(value instanceof Error ? value.message : '工作区读取失败'))
-  }, [active, refresh, refreshKey, syncLocalProjectsToPhone])
+  const {
+    syncState,
+    conflicts: editingConflicts,
+    resolvingConflictId,
+    conflictError,
+    conflictProgress,
+    conflictDialogOpen,
+    conflictStatusCollapsed,
+    openConflictDialog,
+    collapseConflictStatus,
+    expandConflictStatus,
+    syncProjectToPhone,
+    resolveConflict,
+  } = useLunaEditProjectSync({
+    active,
+    refreshKey,
+    project,
+    dirty,
+    refresh,
+    setProject,
+    setSelectedClipId,
+    setDirty,
+    setError,
+  })
 
   const loadProject = useCallback(async (id: string) => {
     if (!id) {
@@ -404,14 +200,6 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
     if (!active || !projectId) return
     void loadProject(projectId)
   }, [active, loadProject, projectId])
-
-  useEffect(() => {
-    if (!active || !project || dirty) return
-    const timer = window.setInterval(() => {
-      void syncLocalProjectsToPhone().catch(() => undefined)
-    }, 5_000)
-    return () => window.clearInterval(timer)
-  }, [active, dirty, project, syncLocalProjectsToPhone])
 
   useEffect(() => {
     if (!playing || totalDurationMs <= 0) return
@@ -713,5 +501,17 @@ export function LunaEditWorkspace({ active, projectId, onProjectIdChange, onProj
     {error && <div className="ai-edit-error" role="alert">{error}</div>}
     <datalist id="ai-edit-source-list">{media.map(item => <option key={item.mediaId} value={item.name} />)}</datalist>
     <span hidden>{selectedSource?.name}</span>
+    <EditingProjectSyncControls
+      open={active && conflictDialogOpen}
+      conflicts={editingConflicts}
+      resolving={resolvingConflictId !== null}
+      error={conflictError}
+      progress={conflictProgress}
+      statusCollapsed={conflictStatusCollapsed}
+      onOpenConflictDialog={openConflictDialog}
+      onCollapseStatus={collapseConflictStatus}
+      onExpandStatus={expandConflictStatus}
+      onResolve={source => void resolveConflict(source)}
+    />
   </section>
 }

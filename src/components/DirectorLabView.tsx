@@ -410,7 +410,7 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
         }}
       />
       <DirectorPlanConflictDialog
-        open={conflictsOpen}
+        open={active && conflictsOpen}
         onOpenChange={setConflictsOpen}
         conflicts={conflicts}
         resolvingPlanId={resolvingPlanId}

@@ -51,6 +51,24 @@ export async function writeEditingProject(
   return response
 }
 
+export async function resolveEditingProjectFromPhone(
+  endpoint: string,
+  projectId: string,
+  expectedRevision: number,
+): Promise<LunaEditProjectSyncRecord> {
+  const base = normalizeEndpoint(endpoint)
+  const response = await window.luna.lunaKaHttpClient.request<LunaEditProjectSyncRecord>(
+    base,
+    `/api/v1/editing/projects/${encodeURIComponent(projectId)}/resolve-phone`,
+    { method: 'POST', body: { expected_revision: expectedRevision } },
+  )
+  if (response.service !== 'luna-ka-editing' || response.api_version !== 1
+    || response.project.id !== projectId || response.deleted_at !== null) {
+    throw new Error('手机返回的剪辑工程格式不兼容')
+  }
+  return response
+}
+
 export async function deleteEditingProject(
   endpoint: string,
   projectId: string,

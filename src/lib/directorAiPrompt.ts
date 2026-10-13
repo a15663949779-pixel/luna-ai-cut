@@ -5,20 +5,21 @@ export function buildDirectorAiPrompt(plan: DirectorLanPlanSummary): string {
   if (!directory) throw new Error('请先下载到文件夹')
   const basePath = directory.replace(/[\\/]+$/, '')
   return [
-    `素材：${plan.title}`,
+    `拍摄计划：${plan.title}`,
     `计划 ID：${plan.id}`,
     `素材目录：${directory}`,
-    `素材清单：${basePath}/manifest.json`,
-    `镜头说明：${basePath}/README.md`,
     '',
-    '文件规则：',
-    '- 清单中的 shots 是镜头分组，shots[].media 是各组素材。',
-    '- media.path 相对素材目录；path 为空或 available 为 false 表示素材未下载。',
-    '- 计划主要内容、镜头描述和方案是用户已规划的核心剪辑需求；按导拍结构组织成片，在各镜头全部素材中挑选可用段落，不另行重构无关故事。',
-    '- 镜头列表顺序不约束成片顺序；可按叙事、节奏和衔接自由重排，只有用户明确要求时才固定顺序。',
-    '- 素材检查用于处理拍摄偏差、选取可用段落和衔接；位置、时间、来源与亮点辅助判断。selected_range 是允许选取范围。',
-    '- selected_range.start_ms/end_ms 和 markers 的时间均对应原素材时间轴，单位为毫秒。',
-    '- 在 Luna AI Cut 中剪辑时，先发现并读取导演剪辑技能，通过本地素材列表的 directorContexts 匹配该计划，再校验并应用剪辑方案。',
-    '- 原素材保持不变。',
+    '目录内容：',
+    `- manifest.json：${basePath}/manifest.json（JSON 格式的计划与素材元数据，格式标识为 luna-director-plan-v1）。`,
+    `- README.md：${basePath}/README.md（计划和镜头信息的可读摘要）。`,
+    `- media/：${basePath}/media/（按镜头分文件夹保存的素材原文件）。`,
+    '- 素材文件相对路径格式为 media/<两位镜头序号>_<镜头名>/<两位素材序号>_<原文件名>；原文件格式保留，不裁剪或转码。',
+    '',
+    'manifest.json 数据结构：',
+    '- shots 是镜头数组；每个镜头包含 id、order、name、attributes、remark、action_guidance、subtitle、visual_description、duration_ms、shot_recipe 和 media 等字段。',
+    '- 每个镜头的 media 是素材数组，包含 id、file_name、type、location、source_camera_path、created_at、captured_at、duration_ms、width、height、codec、path、available、selected_range 和 markers 等字段。',
+    '- media.path 是相对素材目录的文件路径；path 为 null 或 available 为 false 表示本地素材不可用。',
+    '- selected_range.start_ms/end_ms 和 markers.start_ms/end_ms 使用毫秒，时间对应原素材时间轴；selected_range.note 是片段备注，markers[].text 是亮点标签。',
+    '- 素材技术信息包括类型、文件名、来源路径、创建和拍摄时间、时长、画面尺寸及编码格式；具体值以 manifest.json 为准。',
   ].join('\n')
 }

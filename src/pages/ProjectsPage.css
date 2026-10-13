@@ -82,7 +82,7 @@
 .footage-empty-state strong { color: #b8b8bd; font-size: 13px; font-weight: 500; }
 .footage-empty-state small { color: #77777d; font-size: 11px; text-align: center; }
 .footage-empty-icon { display: grid; width: 42px; height: 42px; place-items: center; margin-bottom: 3px; border: 1px solid #39393d; border-radius: 12px; background: #202023; color: #83baff; }
-.ai-edit-workspace { display: grid; grid-template-columns: minmax(210px, 250px) minmax(320px, 1fr) minmax(260px, 310px); grid-template-rows: 48px minmax(0, 1fr) 176px; background: #202022; }
+.ai-edit-workspace { position: relative; display: grid; grid-template-columns: minmax(210px, 250px) minmax(320px, 1fr) minmax(260px, 310px); grid-template-rows: 48px minmax(0, 1fr) 176px; background: #202022; }
 .ai-edit-toolbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid #38383a; }
 .ai-edit-toolbar .ui-select-full { max-width: 280px; }
 .ai-edit-toolbar > span { margin-left: auto; color: #8e8e93; font-size: 11px; }
@@ -134,6 +134,10 @@
 .ai-edit-empty { grid-column: 1 / -1; display: grid; place-items: center; color: #88888d; font-size: 13px; }
 .ai-edit-empty-inline { align-self: center; padding: 0 8px; color: #88888d; font-size: 11px; }
 .ai-edit-error { position: absolute; right: 14px; bottom: 14px; z-index: 4; max-width: min(520px, 70vw); border: 1px solid #704949; border-radius: 7px; padding: 8px 11px; background: #382727; color: #ffb4b4; font-size: 11px; }
+.ai-edit-sync-background { position: absolute; right: 14px; bottom: 14px; z-index: 4; display: flex; max-width: min(520px, 70vw); align-items: center; gap: 10px; border: 1px solid #414144; border-radius: 7px; padding: 8px 11px; background: #252527; color: #d6d6d9; font-size: 11px; }
+.ai-edit-sync-background-error { border-color: #704949; background: #382727; color: #ffb4b4; }
+.ai-edit-sync-background button { flex: 0 0 auto; border: 0; padding: 2px; background: transparent; color: var(--blue-on-dark); font: inherit; cursor: pointer; }
+.ai-edit-sync-background-collapsed { font: inherit; text-align: left; cursor: pointer; }
 .ai-edit-source-copy { min-width: 0; display: grid; gap: 3px; border: 0; padding: 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ai-edit-source-copy strong { overflow: hidden; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .ai-edit-source-copy small { color: #88888d; font-size: 10px; }
