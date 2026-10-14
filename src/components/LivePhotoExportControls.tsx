@@ -8,7 +8,7 @@ interface LivePhotoExportControlsProps {
   value: VideoExportSettings
   duration: number
   allowedFormats?: VideoExportFormat[]
-  outputAvailability?: { video: boolean; photo: boolean; live: boolean }
+  outputAvailability?: { video: boolean; photo: boolean; live: boolean; livePhotoVideo?: boolean }
   onChange: (settings: VideoExportSettings) => void
 }
 
@@ -17,14 +17,15 @@ export function LivePhotoExportControls({ value, duration, allowedFormats, outpu
   const videoAvailable = outputAvailability?.video ?? true
   const photoAvailable = outputAvailability?.photo ?? false
   const liveAvailable = outputAvailability?.live ?? true
+  const livePhotoVideoAvailable = outputAvailability?.livePhotoVideo ?? false
 
   const toggleFormat = useCallback((format: VideoExportFormat, checked: boolean) => {
     const formats = checked
       ? [...new Set([...value.exportFormats, format])]
       : value.exportFormats.filter((candidate) => candidate !== format)
     if (checked && format !== 'video') {
-      let trimStartTime = Math.max(0, value.trimStartTime)
-      let trimEndTime = Math.min(duration, value.trimEndTime ?? duration)
+      const trimStartTime = Math.max(0, value.trimStartTime)
+      const trimEndTime = Math.min(duration, value.trimEndTime ?? duration)
       const liveDuration = Math.min(3, Math.max(0.1, trimEndTime - trimStartTime))
       const liveStartTime = Math.min(Math.max(value.liveStartTime, trimStartTime), trimEndTime - liveDuration)
       onChange({ ...value, exportFormats: formats, trimStartTime, trimEndTime, liveStartTime })
@@ -70,6 +71,19 @@ export function LivePhotoExportControls({ value, duration, allowedFormats, outpu
             />
           </div>
         ))}
+        {livePhotoVideoAvailable ? (
+          <div className="live-photo-export-format">
+            <div>
+              <div className="live-photo-export-format-name">Live 图转视频</div>
+              <div className="live-photo-export-format-description">单独导出 Live 图中的视频</div>
+            </div>
+            <Switch
+              checked={value.exportLiveVideo}
+              onCheckedChange={(exportLiveVideo) => onChange({ ...value, exportLiveVideo })}
+              ariaLabel="Live 图转视频"
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   )

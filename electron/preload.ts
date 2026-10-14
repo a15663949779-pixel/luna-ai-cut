@@ -211,6 +211,7 @@ const lunaApi: LunaApi & { exportTask: LunaExportTaskApi } = {
   getAvailableExportPath: (desiredPath: string) => ipcRenderer.invoke('exports:availablePath', desiredPath),
   previewFile: (file: LunaFile, files: LunaFile[]) => ipcRenderer.invoke('luna:previewFile', file, files),
   previewLivePhoto: (sourceUrl: string) => ipcRenderer.invoke('luna:previewLivePhoto', sourceUrl),
+  extractLivePhotoImage: (sourceUrl: string) => ipcRenderer.invoke('luna:extractLivePhotoImage', sourceUrl),
   resolveThumbnail: (filePath: string, kind?: string) => ipcRenderer.invoke('luna:resolveThumbnail', filePath, kind),
   getMediaMetadata: (file: LunaFile, cachedPath?: string | null) => ipcRenderer.invoke('luna:metadata', file, cachedPath),
   getMediaMetadataByPath: (filePath: string) => ipcRenderer.invoke('luna:metadataByPath', filePath),

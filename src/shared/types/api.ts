@@ -213,6 +213,7 @@ export interface LunaApi {
   getAvailableExportPath(desiredPath: string): Promise<string>
   previewFile(file: LunaFile, files: LunaFile[]): Promise<PreviewResult>
   previewLivePhoto(sourceUrl: string): Promise<PreviewResult>
+  extractLivePhotoImage(sourceUrl: string): Promise<string>
   previewWithWatermark(file: LunaFile, sourcePath: string, settings: WatermarkSettings): Promise<PreviewResult>
   getMediaMetadata(file: LunaFile, cachedPath?: string | null): Promise<MediaMetadata>
   getMediaMetadataByPath(filePath: string): Promise<MediaMetadata>
