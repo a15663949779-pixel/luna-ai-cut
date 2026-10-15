@@ -1,9 +1,10 @@
-import { forwardRef, useEffect, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { Dialog as RadixDialog } from 'radix-ui'
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { acquireIndex, contentZ, overlayZ, releaseIndex } from './zIndexManager'
+import { contentZ, overlayZ } from './zIndexManager'
+import { useModalZIndex } from './useModalZIndex'
 
 /* ═══════════════════════════════════════════════
    全局 Dialog 栈 — Cmd+W / Ctrl+W 只关闭最上层 Dialog
@@ -96,44 +97,32 @@ export function Dialog({
   showOverlay = true,
   showCloseButton = true,
 }: DialogProps) {
-  const zRef = useRef<{ id: string; zIndex: number } | null>(null)
-
-  // 弹窗打开时获取递增 z-index
-  useEffect(() => {
-    if (open && !zRef.current) {
-      zRef.current = acquireIndex()
-    } else if (!open && zRef.current) {
-      releaseIndex(zRef.current.id)
-      zRef.current = null
-    }
-  }, [open])
-
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
-      if (zRef.current) releaseIndex(zRef.current.id)
-    }
-  }, [])
+  const [internalOpen, setInternalOpen] = useState(defaultOpen ?? false)
+  const isOpen = open ?? internalOpen
+  const changeOpen = useCallback((nextOpen: boolean) => {
+    if (open === undefined) setInternalOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }, [open, onOpenChange])
+  const zIndex = useModalZIndex(isOpen)
 
   // Cmd+W / Ctrl+W 关闭最上层 Dialog
   // 通过全局 closeStack 注册/注销关闭回调，确保嵌套场景只关顶层
   useEffect(() => {
-    if (!open) return
-    const close = () => onOpenChange?.(false)
+    if (!isOpen) return
+    const close = () => changeOpen(false)
     closeStack.push(close)
     return () => {
       const idx = closeStack.indexOf(close)
       if (idx >= 0) closeStack.splice(idx, 1)
     }
-  }, [open, onOpenChange])
+  }, [isOpen, changeOpen])
 
-  const zIndex = zRef.current?.zIndex ?? 0
   const oZ = overlayZ(zIndex)
   const cZ = contentZ(zIndex)
   const isFullscreen = variant === 'fullscreen'
 
   return (
-    <RadixDialog.Root open={open} onOpenChange={onOpenChange} defaultOpen={defaultOpen} modal={modal}>
+    <RadixDialog.Root open={isOpen} onOpenChange={changeOpen} modal={modal}>
       {trigger && <RadixDialog.Trigger asChild>{trigger}</RadixDialog.Trigger>}
       <RadixDialog.Portal>
         {showOverlay && <DialogOverlay style={{ zIndex: oZ }} />}

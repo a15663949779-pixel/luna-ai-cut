@@ -1,7 +1,8 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
-import { acquireIndex, overlayZ, releaseIndex } from './zIndexManager'
+import { overlayZ } from './zIndexManager'
+import { useModalZIndex } from './useModalZIndex'
 import './modal-layer.css'
 
 interface ModalLayerProps {
@@ -31,17 +32,7 @@ interface ModalLayerProps {
  * 需要自动聚焦和 Cmd+W 快捷键时使用 BaseModal（它内部使用 ModalLayer）。
  */
 export function ModalLayer({ onClose, children, variant = 'fullscreen' }: ModalLayerProps) {
-  const zRef = useRef<{ id: string; zIndex: number } | null>(null)
-
-  // 挂载时获取递增 z-index
-  useEffect(() => {
-    if (!zRef.current) zRef.current = acquireIndex()
-    return () => {
-      if (zRef.current) releaseIndex(zRef.current.id)
-    }
-  }, [])
-
-  const zIndex = zRef.current?.zIndex ?? 0
+  const zIndex = useModalZIndex(true)
   const oZ = overlayZ(zIndex)
 
   useEffect(() => {
