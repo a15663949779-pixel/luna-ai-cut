@@ -45,23 +45,8 @@
   margin-bottom: 0;
 }
 
-.director-range-controls {
+.director-media-preview-timeline {
   flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.director-range-actions {
-  display: grid;
-  grid-template-columns: repeat(2, auto);
-  justify-content: end;
-  align-items: center;
-  gap: 8px;
-}
-
-.director-range-actions > .ui-btn {
-  height: 44px;
 }
 
 @media (max-width: 800px) {

@@ -26,7 +26,7 @@ interface ModalLayerProps {
  * - Portal 到 document.body
  * - 全屏遮罩（点击关闭）
  * - Esc 键关闭
- * - 统一的 z-index 层级（与 Dialog 共享递增进位，后打开的永远在最前）
+ * - 统一的 z-index 层级（与 Dialog 共享层级栈，后打开的永远在最前）
  *
  * 子元素自行负责内容定位（position:fixed / flex 居中 / 绝对定位等）。
  * 需要自动聚焦和 Cmd+W 快捷键时使用 BaseModal（它内部使用 ModalLayer）。

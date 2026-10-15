@@ -33,6 +33,8 @@ interface TrimStripProps {
   playheadRange?: { startTime: number; endTime: number }
   /** 是否使用内部动画平滑播放头；关闭时严格使用外部视频时间。 */
   animatePlayhead?: boolean
+  /** 关闭截取范围界面，只保留缩略图和播放头定位。 */
+  selectionEnabled?: boolean
   compact?: boolean
   thumbnails: ImageData[]
   outputMarkers?: VideoOutputMarker[]
@@ -82,6 +84,7 @@ export function TrimStrip({
   secondaryFixedRange,
   playheadRange,
   animatePlayhead = true,
+  selectionEnabled = true,
   compact = false,
   thumbnails,
   outputMarkers = [],
@@ -223,7 +226,7 @@ export function TrimStrip({
     const x = e.clientX - rect.left
     const lx = timeToX(startTime)
     const rx = timeToX(endTime)
-    if (Math.abs(x - lx) < 20 || Math.abs(x - rx) < 20) return
+    if (selectionEnabled && (Math.abs(x - lx) < 20 || Math.abs(x - rx) < 20)) return
     const targetTime = xToTime(x)
     if (fixedDuration) {
       const nextStart = targetTime >= startTime && targetTime <= endTime
@@ -254,7 +257,7 @@ export function TrimStrip({
     setDragging('playhead')
     onSeek(targetTime)
     onPlayheadChange?.(targetTime)
-  }, [duration, endTime, fixedDuration, onFixedStartChange, onPlayheadChange, onSeek, snapTime, startTime, timeToX, xToTime])
+  }, [duration, endTime, fixedDuration, onFixedStartChange, onPlayheadChange, onSeek, selectionEnabled, snapTime, startTime, timeToX, xToTime])
 
   const handleSecondaryPointerDown = useCallback((e: React.PointerEvent) => {
     if (!secondaryFixedRange) return
@@ -365,8 +368,8 @@ export function TrimStrip({
   const leftHandleX = timeToX(startTime)
   const rightHandleX = timeToX(endTime)
   // 把手层级高于播放头，因此播放头可以准确到达范围端点而不影响拖动。
-  const playheadLeftX = timeToX(playheadRange?.startTime ?? startTime)
-  const playheadRightX = timeToX(playheadRange?.endTime ?? endTime)
+  const playheadLeftX = timeToX(playheadRange?.startTime ?? (selectionEnabled ? startTime : 0))
+  const playheadRightX = timeToX(playheadRange?.endTime ?? (selectionEnabled ? endTime : duration))
   const playheadX = Math.max(playheadLeftX, Math.min(timeToX(displayTime), playheadRightX))
   const secondaryLeftX = secondaryFixedRange ? timeToX(secondaryFixedRange.startTime) : 0
   const secondaryRightX = secondaryFixedRange
@@ -375,7 +378,7 @@ export function TrimStrip({
   const secondaryCoverX = secondaryFixedRange?.coverTime === undefined
     ? null
     : timeToX(snapTime(secondaryFixedRange.coverTime)) - secondaryLeftX
-  const rangeEditable = Boolean(onStartTimeChange && onEndTimeChange)
+  const rangeEditable = selectionEnabled && Boolean(onStartTimeChange && onEndTimeChange)
   const rulerTicks = useMemo(() => {
     if (duration <= 0) return []
     const count = 5
@@ -399,15 +402,17 @@ export function TrimStrip({
       >
         <canvas ref={canvasRef} className="workspace-trim-canvas" />
 
-        {/* 遮罩 */}
-        {leftHandleX > 0 && <div className="workspace-trim-mask" style={{ left: 0, width: leftHandleX }} />}
-        {rightHandleX < trackWidth && <div className="workspace-trim-mask" style={{ left: rightHandleX, right: 0 }} />}
+        {selectionEnabled && <>
+          {/* 遮罩 */}
+          {leftHandleX > 0 && <div className="workspace-trim-mask" style={{ left: 0, width: leftHandleX }} />}
+          {rightHandleX < trackWidth && <div className="workspace-trim-mask" style={{ left: rightHandleX, right: 0 }} />}
 
-        {/* 截取范围高亮背景 */}
-        <div className="workspace-trim-range-bg" style={{ left: leftHandleX, width: Math.max(0, rightHandleX - leftHandleX) }} />
+          {/* 截取范围高亮背景 */}
+          <div className="workspace-trim-range-bg" style={{ left: leftHandleX, width: Math.max(0, rightHandleX - leftHandleX) }} />
 
-        {/* 完整蓝色边框 */}
-        <div className="workspace-trim-range-border" style={{ left: leftHandleX, width: Math.max(0, rightHandleX - leftHandleX) }} />
+          {/* 完整蓝色边框 */}
+          <div className="workspace-trim-range-border" style={{ left: leftHandleX, width: Math.max(0, rightHandleX - leftHandleX) }} />
+        </>}
 
         <div className="workspace-trim-output-markers" aria-hidden="true">
           {outputMarkers.map((marker) => marker.kind === 'photo' ? (
