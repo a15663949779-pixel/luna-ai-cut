@@ -7,6 +7,14 @@
   gap: 12px;
 }
 
+.director-lab-pair-mode {
+  width: 100%;
+}
+
+.director-lab-pair-mode > * {
+  flex: 1;
+}
+
 .director-lab-pair-device {
   display: flex;
   align-items: center;
@@ -18,7 +26,7 @@
   flex: 1;
 }
 
-.director-lab-pair-fields > .ui-input-full {
+.director-lab-pair-code {
   letter-spacing: 0.2em;
   text-align: center;
   font-variant-numeric: tabular-nums;
