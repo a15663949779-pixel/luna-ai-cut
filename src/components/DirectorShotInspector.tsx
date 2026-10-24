@@ -3,6 +3,7 @@ import { Clock3 } from 'lucide-react'
 import type { DirectorLanShot, DirectorLanTake } from '../shared/types'
 import { normalizeDirectorShotFields } from '../lib/directorShotFields'
 import { DirectorTakeList } from './DirectorTakeList'
+import { DirectorMovementReferencePreview } from './director-movement-reference/DirectorMovementReferencePreview'
 import { Button, Dialog, toast } from '../ui'
 import './DirectorMediaPreviewDialog.css'
 
@@ -11,12 +12,13 @@ interface Props {
   takes: DirectorLanTake[]
   selectedId?: string
   disabled?: boolean
+  showMovementReference?: boolean
   onSelect: (take: DirectorLanTake) => void
   onAddMaterials: () => void
   onDeleteMaterial?: (take: DirectorLanTake) => Promise<void>
 }
 
-export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, onSelect, onAddMaterials, onDeleteMaterial }: Props) {
+export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, showMovementReference = true, onSelect, onAddMaterials, onDeleteMaterial }: Props) {
   const [deleteCandidate, setDeleteCandidate] = useState<DirectorLanTake | null>(null)
   const [deleting, setDeleting] = useState(false)
   const deleteMaterial = async () => {
@@ -34,6 +36,10 @@ export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, 
       <span>{field.name}</span><p>{field.description}</p>
     </section>)}
     {fields.remark && <section className="lab-viewer-shot-section"><span>备注</span><p>{fields.remark}</p></section>}
+    {showMovementReference && shot.movement_reference && <section className="lab-viewer-shot-section">
+      <span>镜头构图</span>
+      <DirectorMovementReferencePreview reference={shot.movement_reference} showHint />
+    </section>}
     <DirectorTakeList takes={takes} selectedId={selectedId} disabled={disabled || deleting} onSelect={onSelect} onAddMaterials={onAddMaterials}
       onDelete={onDeleteMaterial ? setDeleteCandidate : undefined} />
   </aside>

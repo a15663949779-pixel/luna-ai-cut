@@ -156,14 +156,14 @@
   cursor: pointer;
 }
 .ai-editor-back:hover { color: #fff; }
-.ai-editor-page.is-project-home { background: #1f1f21; }
+.ai-editor-page.is-project-home { background: var(--parchment); color: var(--ink); }
 .ai-editor-page.is-project-home .ai-editor-main { overflow: auto; }
 .ai-project-home { box-sizing: border-box; min-height: 100%; padding: 26px 30px 38px; }
 .ai-project-home-inner { width: min(1440px, 100%); margin: 0 auto; }
 .ai-project-home-header { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 18px; }
 .ai-project-heading { display: flex; align-items: baseline; gap: 12px; }
-.ai-project-heading h1 { margin: 0; color: #f1f1f2; font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
-.ai-project-heading > span { color: #8f8f95; font-size: 11px; }
+.ai-project-heading h1 { margin: 0; color: var(--ink); font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
+.ai-project-heading > span { color: var(--muted); font-size: 11px; }
 .ai-project-home-actions { display: flex; align-items: center; gap: 8px; }
 .ai-project-home-actions .ui-btn { min-height: 32px; }
 .ai-project-list-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
@@ -171,27 +171,27 @@
 .ai-project-filters button { min-height: 29px; border: 0; border-radius: 6px; padding: 0 10px; background: transparent; color: #929297; font: inherit; font-size: 11px; cursor: pointer; }
 .ai-project-filters button:hover { color: #e7e7e9; }
 .ai-project-filters button.active { background: #363639; color: #f1f1f2; }
-.ai-project-search { display: flex; width: min(240px, 30vw); height: 30px; align-items: center; gap: 7px; box-sizing: border-box; margin-bottom: 4px; border: 1px solid #414144; border-radius: 6px; padding: 0 9px; color: #88888e; }
-.ai-project-search:focus-within { border-color: #626269; }
-.ai-project-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #e9e9ea; font: inherit; font-size: 11px; }
-.ai-project-search input::placeholder { color: #77777d; }
-.ai-project-list { padding-top: 2px; }
-.ai-project-row-shell { display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; border-bottom: 1px solid #363639; }
-.ai-project-row { display: grid; width: 100%; min-height: 74px; grid-template-columns: 42px minmax(180px, 1fr) minmax(210px, 270px) 20px; align-items: center; gap: 14px; border: 0; padding: 10px 12px; background: transparent; color: #e9e9ea; text-align: left; cursor: pointer; transition: background .14s ease; }
-.ai-project-row:hover { background: #29292c; }
-.ai-project-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: #2b3d53; color: #83baff; }
+.ai-project-search { display: flex; width: min(240px, 30vw); height: 30px; align-items: center; gap: 7px; box-sizing: border-box; margin-bottom: 4px; border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 6px; padding: 0 9px; color: var(--muted); }
+.ai-project-search:focus-within { border-color: var(--blue); }
+.ai-project-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 11px; }
+.ai-project-search input::placeholder { color: var(--muted); }
+.ai-project-list { overflow: hidden; border: 1px solid var(--hairline); border-radius: 12px; padding-top: 0; background: var(--canvas); }
+.ai-project-row-shell { display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; border-bottom: 1px solid var(--hairline); }
+.ai-project-row { display: grid; width: 100%; min-height: 74px; grid-template-columns: 42px minmax(180px, 1fr) minmax(210px, 270px) 20px; align-items: center; gap: 14px; border: 0; padding: 10px 12px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; transition: background .14s ease; }
+.ai-project-row:hover { background: var(--parchment); }
+.ai-project-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: #e7f1ff; color: var(--blue); }
 .ai-project-icon.editing { background: #393342; color: #c8a9ff; }
 .ai-project-row-title { display: grid; min-width: 0; gap: 5px; }
-.ai-project-row-title strong { overflow: hidden; color: #e7e7e9; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.ai-project-row-title small, .ai-project-row-progress small { color: #8c8c92; font-size: 10px; }
+.ai-project-row-title strong { overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.ai-project-row-title small, .ai-project-row-progress small { color: var(--muted); font-size: 10px; }
 .ai-project-row-progress { display: grid; justify-items: end; gap: 4px; }
-.ai-project-row-progress strong { color: #d8d8db; font-size: 11px; font-weight: 500; white-space: nowrap; }
-.ai-project-row-arrow { justify-self: center; color: #828288; }
-.ai-project-empty { display: grid; min-height: 220px; align-content: center; justify-items: center; gap: 14px; color: #9a9a9f; font-size: 12px; }
-.ai-project-empty > strong { color: #b8b8bd; font-size: 13px; font-weight: 500; }
-.ai-project-empty > button { border: 0; background: transparent; color: #83baff; font: inherit; cursor: pointer; }
+.ai-project-row-progress strong { color: var(--blue); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.ai-project-row-arrow { justify-self: center; color: var(--muted); }
+.ai-project-empty { display: grid; min-height: 220px; align-content: center; justify-items: center; gap: 14px; color: var(--muted); font-size: 12px; }
+.ai-project-empty > strong { color: var(--ink); font-size: 13px; font-weight: 500; }
+.ai-project-empty > button { border: 0; background: transparent; color: var(--blue); font: inherit; cursor: pointer; }
 .ai-project-empty-actions { display: flex; align-items: center; gap: 14px; }
-.ai-project-empty-actions button { border: 0; padding: 4px; background: transparent; color: #83baff; font: inherit; font-size: 11px; cursor: pointer; }
+.ai-project-empty-actions button { border: 0; padding: 4px; background: transparent; color: var(--blue); font: inherit; font-size: 11px; cursor: pointer; }
 .ai-project-empty-actions button:disabled { opacity: .55; cursor: default; }
 .ai-project-subnav-type { color: #b9b9bd; font-size: 12px; }
 .ai-project-shooting-host {

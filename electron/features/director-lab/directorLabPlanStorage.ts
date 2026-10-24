@@ -10,6 +10,7 @@ import type {
   DirectorLanShotAttribute,
 } from '../../../src/shared/types'
 import { DIRECTOR_PLAN_ATTRIBUTES, directorPlanContentSignature } from '../../../src/lib/directorPlanSync.ts'
+import { normalizeDirectorMovementReference } from '../../../src/lib/directorMovementReference.ts'
 import { cleanupDirectorMedia } from './directorLabMediaCleanup.ts'
 import { ensureDirectorMediaCopy } from './directorLabMediaCopy.ts'
 
@@ -156,46 +157,50 @@ export function manifestForPlan(
     deleted_local_take_ids: plan.deleted_local_take_ids ?? [],
     exported_at: new Date().toISOString(),
     attributes: plan.attributes ?? DIRECTOR_PLAN_ATTRIBUTES,
-    shots: plan.shots.map((shot, shotIndex) => ({
-      id: shot.id,
-      order: shotIndex + 1,
-      name: shot.name,
-      attributes: shot.attributes ?? [],
-      remark: shot.remark ?? '',
-      action_guidance: shot.action_guidance ?? '',
-      subtitle: shot.subtitle ?? '',
-      visual_description: legacyShotAttribute(shot, ['画面说明', '画面', '目标', '拍摄目标'])
-        || shot.visual_description
-        || '',
-      objective: legacyShotAttribute(shot, ['画面说明', '画面', '目标', '拍摄目标'])
-        || shot.visual_description
-        || '',
-      duration_ms: shot.duration_ms,
-      ...(shot.shot_recipe !== undefined ? { shot_recipe: shot.shot_recipe } : {}),
-      movement_description: legacyShotAttribute(shot, ['运镜说明', '运镜', '相机运动'])
-        || shot.movement_description
-        || '',
-      media: shot.takes.map((take, takeIndex) => ({
-        id: take.id,
-        file_name: take.file_name,
-        type: take.kind,
-        location: take.location ?? null,
-        source_camera_path: take.source_camera_path ?? null,
-        created_at: take.created_at,
-        captured_at: metadata[take.id]?.capturedAt ?? take.captured_at ?? null,
-        duration_ms: metadata[take.id]?.durationMs ?? take.duration_ms ?? null,
-        width: metadata[take.id]?.width ?? take.width ?? null,
-        height: metadata[take.id]?.height ?? take.height ?? null,
-        codec: metadata[take.id]?.codec ?? take.codec ?? null,
-        path: take.available
-          ? path.posix.join(mediaFolder(shot.order, shot.name).replace(/\\/g, '/'), mediaFileName(takeIndex + 1, take.file_name))
-          : null,
-        available: take.available,
-        selected_range: take.selected_range,
-        markers: take.markers ?? [],
-        review: take.review ?? { liked: false, comment: '', moments: [] },
-      })),
-    })),
+    shots: plan.shots.map((shot, shotIndex) => {
+      const movementReference = normalizeDirectorMovementReference(shot.movement_reference)
+      return {
+        id: shot.id,
+        order: shotIndex + 1,
+        name: shot.name,
+        attributes: shot.attributes ?? [],
+        remark: shot.remark ?? '',
+        action_guidance: shot.action_guidance ?? '',
+        subtitle: shot.subtitle ?? '',
+        ...(movementReference ? { movement_reference: movementReference } : {}),
+        visual_description: legacyShotAttribute(shot, ['画面说明', '画面', '目标', '拍摄目标'])
+          || shot.visual_description
+          || '',
+        objective: legacyShotAttribute(shot, ['画面说明', '画面', '目标', '拍摄目标'])
+          || shot.visual_description
+          || '',
+        duration_ms: shot.duration_ms,
+        ...(shot.shot_recipe !== undefined ? { shot_recipe: shot.shot_recipe } : {}),
+        movement_description: legacyShotAttribute(shot, ['运镜说明', '运镜', '相机运动'])
+          || shot.movement_description
+          || '',
+        media: shot.takes.map((take, takeIndex) => ({
+          id: take.id,
+          file_name: take.file_name,
+          type: take.kind,
+          location: take.location ?? null,
+          source_camera_path: take.source_camera_path ?? null,
+          created_at: take.created_at,
+          captured_at: metadata[take.id]?.capturedAt ?? take.captured_at ?? null,
+          duration_ms: metadata[take.id]?.durationMs ?? take.duration_ms ?? null,
+          width: metadata[take.id]?.width ?? take.width ?? null,
+          height: metadata[take.id]?.height ?? take.height ?? null,
+          codec: metadata[take.id]?.codec ?? take.codec ?? null,
+          path: take.available
+            ? path.posix.join(mediaFolder(shot.order, shot.name).replace(/\\/g, '/'), mediaFileName(takeIndex + 1, take.file_name))
+            : null,
+          available: take.available,
+          selected_range: take.selected_range,
+          markers: take.markers ?? [],
+          review: take.review ?? { liked: false, comment: '', moments: [] },
+        })),
+      }
+    }),
   }, null, 2)
 }
 
@@ -237,7 +242,7 @@ interface ExistingManifest {
   pending_shot_ids?: unknown
   pending_take_ids?: unknown
   deleted_local_take_ids?: unknown
-  shots?: Array<{ media?: ExistingManifestMedia[] }>
+  shots?: Array<{ id?: unknown; movement_reference?: unknown; media?: ExistingManifestMedia[] }>
 }
 
 async function localFileExists(filePath: string): Promise<boolean> {
@@ -350,6 +355,11 @@ async function reconcileLocalDirectorPlanUnlocked(
     )
   let manifestNeedsUpdate = existing?.format !== 'luna-director-plan-v1'
     || existing.plan_id !== plan.id
+    || plan.shots.some(shot => {
+      const previous = existing?.shots?.find(item => item.id === shot.id)
+      return JSON.stringify(normalizeDirectorMovementReference(previous?.movement_reference))
+        !== JSON.stringify(normalizeDirectorMovementReference(shot.movement_reference))
+    })
     || [...existingMedia.keys()].some(takeId => !plan.shots.some(shot => shot.takes.some(take => take.id === takeId)))
   const deletedLocalTakeIds = new Set(Array.isArray(existing?.deleted_local_take_ids)
     ? existing!.deleted_local_take_ids.filter((id): id is string => typeof id === 'string') : [])

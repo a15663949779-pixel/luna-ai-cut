@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分镜参考</title>
+<style>__SHELL_CSS__
+__SCENE_CSS__</style>
+</head>
+<body>
+<main id="reference">
+  <div id="picture" role="button" tabindex="0" aria-label="暂停" aria-pressed="false">
+    <div id="scene">__SCENE_HTML__</div>
+    <div id="paused" hidden aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="m9 5 11 7-11 7z"/></svg>
+    </div>
+  </div>
+  <p id="hint"></p>
+</main>
+<script>window.referenceConfig = __CONFIG_JSON__;</script>
+<script>__COMPONENT_SCRIPT__</script>
+<script>__ELEMENT_SCRIPT__</script>
+<script>__SCENE_SCRIPT__</script>
+<script>__PLAYER_SCRIPT__</script>
+</body>
+</html>

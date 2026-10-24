@@ -3,6 +3,7 @@ import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { DirectorLabDownloadPlanRequest, DirectorLabProbeRequest, DirectorLabMediaMetadata, DirectorLanPlanAttribute } from '../../../src/shared/types/directorLab.ts'
 import { validateDirectorTakeMarkers } from '../../../src/lib/directorTakeMarkers.ts'
+import { normalizeDirectorMovementReference } from '../../../src/lib/directorMovementReference.ts'
 import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from '../../../src/lib/directorTakeReview.ts'
 import { directorPlanContentSignature } from '../../../src/lib/directorPlanSync.ts'
 import { legacyShotAttribute } from './directorLabPlanStorage.ts'
@@ -36,6 +37,7 @@ interface LocalManifestShot {
   subtitle?: unknown
   visual_description?: unknown
   movement_description?: unknown
+  movement_reference?: unknown
   duration_ms?: unknown
   shot_recipe?: Record<string, unknown> | null
   media?: unknown
@@ -216,6 +218,7 @@ async function localPlanFromManifest(manifestPath: string, probeMediaOne?: (requ
                 }]
               : []),
           ]
+      const movementReference = normalizeDirectorMovementReference(shot.movement_reference)
       return {
         id: typeof shot.id === 'string' ? shot.id : `local-shot-${shotIndex}`,
         order: typeof shot.order === 'number' ? shot.order : shotIndex + 1,
@@ -225,6 +228,7 @@ async function localPlanFromManifest(manifestPath: string, probeMediaOne?: (requ
         remark: typeof shot.remark === 'string' ? shot.remark : '',
         action_guidance: typeof shot.action_guidance === 'string' ? shot.action_guidance : '',
         subtitle: typeof shot.subtitle === 'string' ? shot.subtitle : '',
+        movement_reference: movementReference,
         visual_description: legacyShotAttribute(
           { attributes },
           ['画面说明', '画面', '目标', '拍摄目标'],

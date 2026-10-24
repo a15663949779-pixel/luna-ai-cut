@@ -170,6 +170,17 @@ export interface DirectorLanPlanSummary {
 /** Opaque mobile recipe: retain every field; interpretation belongs to shot analysis. */
 export type DirectorShotRecipe = Record<string, unknown>
 
+/** Mobile provided HTML composition demo, rendered inside a sandboxed player. */
+export interface DirectorMovementReference {
+  version: 1
+  scene_html: string
+  scene_css: string
+  scene_script: string
+  hint: string
+  duration_ms: number
+  aspect_ratio: number
+}
+
 export interface DirectorLanShot {
   id: string
   order: number
@@ -181,6 +192,7 @@ export interface DirectorLanShot {
   subtitle?: string
   visual_description?: string
   movement_description?: string
+  movement_reference?: DirectorMovementReference | null
   duration_ms: number
   shot_recipe?: DirectorShotRecipe | null
   completed_takes: number

@@ -6,6 +6,7 @@ import { DirectorShotInspector } from './DirectorShotInspector'
 import { DirectorTakeReviewActions } from './DirectorTakeReviewActions'
 import type { DirectorTakeReview } from '../shared/types/directorLab'
 import { PreviewStage, type PreviewStageHandle } from './PreviewStage'
+import { DirectorMovementReferencePreview } from './director-movement-reference/DirectorMovementReferencePreview'
 import { TrimStrip } from '../workspace/trim/TrimStrip'
 import { useTrimThumbnails } from '../workspace/trim/useTrimThumbnails'
 import './DirectorVideoRangeEditor.css'
@@ -87,6 +88,8 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSaveRevi
         }
       }}>
         {!playable ? <>
+          {shot.movement_reference && <DirectorMovementReferencePreview
+            reference={shot.movement_reference} showHint stage />}
           <Button variant="primary" icon={<Upload size={18} />} disabled={adding} onClick={onAddMaterials}>{adding ? '添加中' : '添加素材'}</Button>
           {!phoneConnected && <p role="status">手机未连接，且本地没有可用素材。请连接手机同步素材，或添加本地素材。</p>}
         </> : error ? <span role="alert">{error}</span> : !url ? <LoadingIndicator label="正在读取素材" />
@@ -102,7 +105,8 @@ export function DirectorVideoRangeEditor({ take, shot, takes, source, onSaveRevi
           onTogglePlay={() => stage.current?.togglePlay()} onSeek={seek} />
       </div>}
       </div>
-      <DirectorShotInspector shot={shot} takes={takes} selectedId={take.id} disabled={adding} onAddMaterials={onAddMaterials}
+      <DirectorShotInspector shot={shot} takes={takes} selectedId={take.id} disabled={adding}
+        showMovementReference={playable} onAddMaterials={onAddMaterials}
         onDeleteMaterial={onDeleteMaterial}
         onSelect={selectedTake => { if (selectedTake.id !== take.id) onSelectTake(selectedTake) }} />
     </Dialog>

@@ -12,7 +12,7 @@ const PAIRED_STORAGE_KEY = 'luna.director-lab.paired'
 
 function requiresPairing(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
-  return message.includes('请在手机设置中打开配对码')
+  return message.includes('请在手机局域网访问授权中扫描电脑二维码')
     || message.includes('手机配对已失效')
     || message.includes('局域网服务尚未授权')
     || message.includes('authorization-required')

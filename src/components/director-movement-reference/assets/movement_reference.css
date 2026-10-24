@@ -1,0 +1,64 @@
+:root {
+  color-scheme: dark;
+  --background: #101114;
+  --hint-color: #b8bbc4;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+#reference { width: min(100%, 430px); margin: auto; }
+#picture {
+  width: 100%;
+  aspect-ratio: var(--frame-aspect, 16 / 9);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+#picture:focus-visible { outline: 2px solid #5695ff; outline-offset: -2px; }
+#scene { width: 100%; height: 100%; overflow: hidden; position: relative; }
+#scene > svg, #scene > canvas, #scene > video, #scene > img {
+  width: 100%; height: 100%; display: block; object-fit: cover;
+}
+#paused {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, .12);
+  pointer-events: none;
+}
+#paused[hidden] { display: none; }
+#paused svg {
+  width: 58px; height: 58px;
+  padding: 17px;
+  border-radius: 50%;
+  background: rgba(16, 17, 20, .72);
+  fill: white;
+}
+#hint {
+  margin: 0;
+  padding: 16px 20px calc(20px + env(safe-area-inset-bottom));
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--hint-color);
+}
+
+/* Optional HTML components; light DOM permits ordinary CSS customization. */
+luna-person { display:block; position:absolute; left:55%; bottom:8%; width:12%; height:52%; }
+luna-person > svg { display:block; width:100%; height:100%; overflow:visible; }
+luna-camera { display:block; position:absolute; inset:0; transform-origin:50% 50%; }
+luna-motion { display:block; position:absolute; inset:0; }
+luna-light {
+  display:block; position:absolute; inset:0; pointer-events:none;
+  opacity:var(--light-intensity,.35); mix-blend-mode:screen;
+  background:radial-gradient(ellipse at var(--light-position,0% 30%),var(--light-color,#ffc48a),transparent 75%);
+}
+
+/* Real pose lineart remains legible against both light and dark scenery. */
+.luna-photo-subject {
+  filter: brightness(0) drop-shadow(0 0 1px white);
+}
+#picture[data-playing="false"]:not([role]) { cursor: default; }

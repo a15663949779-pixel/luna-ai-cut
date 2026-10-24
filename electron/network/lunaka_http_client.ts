@@ -13,6 +13,7 @@ import { currentBaseDir } from '../storage/settingsService'
 import { LunaKaWebSocketChannel } from './lunaka_websocket_channel'
 import { lunaKaHttpErrorMessage } from './lunaKaHttpError'
 import { lunaKaDeviceName } from './lunaka_device_name'
+import { LunaKaQrPairingIpc } from './lunaka_qr_pairing_ipc'
 
 interface StoredCredentials {
   clientId: string
@@ -36,7 +37,6 @@ const STORE_FILE = 'lunaka-http-client.json'
 const PAIRED_DEVICES_FILE = 'lan-paired-devices.json'
 const MAX_RESPONSE_BYTES = 24 * 1024 * 1024
 const AUTHORIZATION_PATH = '/api/v1/auth/authorize'
-const PAIRING_PATH = '/api/v1/auth/pair'
 const AUTHORIZATION_CHECK_PATH = '/api/v1/auth/check'
 const PHONE_DEVICE_ID = /^luna-mobile-[A-Za-z0-9_-]{20,40}$/
 
@@ -76,12 +76,6 @@ export class LunaKaHttpClient {
       if (typeof endpoint !== 'string') throw new Error('手机地址无效')
       return this.connect(endpoint)
     })
-    ipcMain.handle('luna-ka-http-client:pair', (_event, endpoint: unknown, code: unknown) => {
-      if (typeof endpoint !== 'string' || typeof code !== 'string') {
-        throw new Error('手机或配对码无效')
-      }
-      return this.pair(endpoint, code)
-    })
     ipcMain.handle(
       'luna-ka-http-client:request',
       async (_event, endpoint: unknown, requestPath: unknown, options: unknown) => {
@@ -92,7 +86,7 @@ export class LunaKaHttpClient {
           return await this.request(endpoint, requestPath, this.validateOptions(options))
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
-          if (message.includes('请在手机设置中打开配对码')
+          if (message.includes('请在手机局域网访问授权中扫描电脑二维码')
             || message.includes('手机配对已失效')
             || message.includes('局域网服务尚未授权')) {
             // Resolve an IPC error value so Electron does not log the same
@@ -145,42 +139,26 @@ export class LunaKaHttpClient {
     }
   }
 
-  async pair(endpoint: string, pairingCode: string): Promise<{ deviceId: string }> {
-    const base = this.normalizeEndpoint(endpoint)
-    const code = pairingCode.trim()
-    if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位配对码')
+  async qrPairingIdentity(): Promise<{ clientId: string; clientName: string }> {
     await this.ensureLoaded()
-    const phone = await this.readPhoneInfo(base)
-    if (!phone.deviceId) throw new Error('手机版本不支持配对码，请更新手机应用')
-    const response = await this.performRequest(
-      new URL(PAIRING_PATH, base),
-      'POST',
-      {
-        client_id: this.clientId,
-        client_name: await lunaKaDeviceName(),
-        pairing_code: code,
-      },
-      { 'Content-Type': 'application/json' },
-    )
-    if (response.statusCode !== 200) {
-      throw this.httpError(response, '配对失败，请检查配对码')
+    if (!this.clientId) throw new Error('局域网客户端未初始化')
+    return { clientId: this.clientId, clientName: await lunaKaDeviceName() }
+  }
+
+  async saveQrPairingCredential(
+    deviceId: string,
+    key: string,
+    endpoint: string,
+  ): Promise<void> {
+    if (!PHONE_DEVICE_ID.test(deviceId) || key.length < 32 || key.length > 256) {
+      throw new Error('配对凭据无效')
     }
-    let payload: { client_id?: unknown; device_id?: unknown; authorization_key?: unknown }
-    try {
-      payload = JSON.parse(response.body) as typeof payload
-    } catch {
-      throw new Error('手机返回的配对信息无效')
-    }
-    if (payload.client_id !== this.clientId || payload.device_id !== phone.deviceId
-      || typeof payload.authorization_key !== 'string' || payload.authorization_key.length < 32) {
-      throw new Error('手机返回的配对信息无效')
-    }
-    this.keysByDeviceId.set(phone.deviceId, payload.authorization_key)
-    this.deviceIdsByOrigin.set(base.origin, phone.deviceId)
-    this.keysByOrigin.set(base.origin, payload.authorization_key)
+    const base = this.normalizeEndpoint(endpoint)
+    await this.ensureLoaded()
+    this.keysByDeviceId.set(deviceId, key)
+    this.deviceIdsByOrigin.set(base.origin, deviceId)
+    this.keysByOrigin.set(base.origin, key)
     await this.persist()
-    await this.connect(base.origin)
-    return { deviceId: phone.deviceId }
   }
 
   async request<T>(
@@ -255,7 +233,7 @@ export class LunaKaHttpClient {
         }
         this.removeOriginCredential(base.origin)
       }
-      throw new Error('请在手机设置中打开配对码，再输入配对')
+      throw new Error('请在手机局域网访问授权中扫描电脑二维码')
     }
 
     const key = this.keysByOrigin.get(base.origin)
@@ -570,7 +548,13 @@ export class LunaKaHttpClient {
 }
 
 export const lunaKaHttpClient = new LunaKaHttpClient()
+const qrPairingIpc = new LunaKaQrPairingIpc({
+  getIdentity: () => lunaKaHttpClient.qrPairingIdentity(),
+  saveCredential: (deviceId, key, endpoint) =>
+    lunaKaHttpClient.saveQrPairingCredential(deviceId, key, endpoint),
+})
 
 export function register(): void {
   lunaKaHttpClient.register()
+  qrPairingIpc.register()
 }

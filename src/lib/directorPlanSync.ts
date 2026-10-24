@@ -1,5 +1,6 @@
 import type { DirectorLanPlanSummary, DirectorPlanSchema } from '../shared/types'
 import { normalizeDirectorShotFields } from './directorShotFields.ts'
+import { normalizeDirectorMovementReference } from './directorMovementReference.ts'
 import { validateDirectorTakeMarkers } from './directorTakeMarkers.ts'
 import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from './directorTakeReview.ts'
 
@@ -42,6 +43,7 @@ function stablePlanContent(plan: DirectorLanPlanSummary) {
       name: shot.name,
       durationMs: shot.duration_ms,
       ...(shot.shot_recipe !== undefined ? { shotRecipe: shot.shot_recipe } : {}),
+      ...(shot.movement_reference ? { movementReference: shot.movement_reference } : {}),
       remark: shot.remark,
       actionGuidance: shot.action_guidance ?? '',
       subtitle: shot.subtitle ?? '',
@@ -116,14 +118,19 @@ export function buildDirectorPlanUpdate(
 ) {
   const shots = plan.shots.map((shot) => {
     const fields = normalizeDirectorShotFields(shot, schema)
+    const movementReference = normalizeDirectorMovementReference(shot.movement_reference)
     if (fields.remark.length > 4000 || (shot.action_guidance?.length ?? 0) > 4000
       || fields.attributes.some((field) => field.description.length > 4000 || field.id.length > 128)) {
       throw new Error('镜头内容超过手机接口限制（invalid-plan-update）')
+    }
+    if (shot.movement_reference != null && !movementReference) {
+      throw new Error('镜头构图演示格式无效（invalid-movement-reference）')
     }
     return { id: shot.id, name: shot.name, duration_ms: shot.duration_ms, ...fields,
       action_guidance: shot.action_guidance ?? '',
       subtitle: shot.subtitle ?? '',
       ...(shot.shot_recipe !== undefined ? { shot_recipe: shot.shot_recipe } : {}),
+      ...(movementReference ? { movement_reference: movementReference } : {}),
       ...(includeTakeRanges ? { take_ranges: shot.takes.filter(take => take.kind === 'video'
         && !plan.pending_take_ids?.includes(take.id) && !plan.deleted_local_take_ids?.includes(take.id))
         .map(take => ({ id: take.id, selected_range: take.selected_range })) } : {}),

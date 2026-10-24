@@ -20,6 +20,7 @@ import { Button, Dialog, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
 import { DirectorShotEditorDialog, type DirectorShotDraft } from './DirectorShotEditorDialog'
 import { DirectorMediaThumbnail } from './DirectorMediaThumbnail'
 import { DirectorShotDetailDialog } from './DirectorShotDetailDialog'
+import { DirectorMovementReferencePreview } from './director-movement-reference/DirectorMovementReferencePreview'
 import { normalizeDirectorShotFields } from '../lib/directorShotFields'
 import { directorPlanContentSignature } from '../lib/directorPlanSync'
 import '../styles/director-lab-shot-edit.css'
@@ -81,9 +82,11 @@ export function DirectorLabShotList({
     duration_ms: number
     remark: string
     attributes: DirectorLanShot['attributes']
+    movement_reference?: DirectorLanShot['movement_reference']
   }>, expectedSignature = plan.local_content_signature ?? directorPlanContentSignature(plan)) {
     return window.luna.directorLab.saveLocalPlan({ ...plan,
       synced_signature: plan.synced_signature ?? directorPlanContentSignature(plan), shots: shots.map((shot, index) => ({
+      ...plan.shots.find(item => item.id === shot.id),
       ...shot, order: index + 1, completed_takes: 0, takes: [],
     })) }, expectedSignature).then((saved) => { onLocalPlanChange(saved); return saved })
   }
@@ -183,7 +186,7 @@ export function DirectorLabShotList({
       const shots = plan.shots.map((shot) => {
         const isEditedShot = shot.id === shotDraft.id
         return {
-          id: shot.id,
+          ...shot,
           name: isEditedShot ? shotDraft.name.trim() : shot.name,
           duration_ms: isEditedShot ? durationMs : shot.duration_ms,
           remark: isEditedShot ? shotDraft.remark.trim() : shot.remark,
@@ -266,7 +269,9 @@ export function DirectorLabShotList({
               ) : (
                 <button type="button" className="lab-shot-card-media is-empty" aria-label={`查看${shot.name}拍摄详情`}
                   onClick={() => setDetailShotId(shot.id)}>
-                  {shot.takes.length > 0 ? <CloudOff size={20} /> : <Camera size={20} />}
+                  {shot.movement_reference
+                    ? <DirectorMovementReferencePreview reference={shot.movement_reference} staticFrame />
+                    : shot.takes.length > 0 ? <CloudOff size={20} /> : <Camera size={20} />}
                 </button>
               )}
               <div className="lab-shot-row-copy">

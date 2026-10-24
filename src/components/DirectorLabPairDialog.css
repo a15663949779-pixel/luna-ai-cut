@@ -1,61 +1,46 @@
 .director-lab-pair-dialog {
-  width: min(420px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
 }
 
-.director-lab-pair-fields {
+.director-lab-pair-content {
   display: grid;
-  gap: 14px;
+  justify-items: center;
+  gap: 12px;
+  min-height: 286px;
 }
 
-.director-lab-pair-mode {
-  width: 100%;
-}
-
-.director-lab-pair-mode > * {
-  flex: 1;
-}
-
-.director-lab-pair-mode .ui-btn-group-btn {
-  height: 44px;
-}
-
-.director-lab-pair-device {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.director-lab-pair-device .ui-select-full {
-  min-width: 0;
-  flex: 1;
-}
-
-.director-lab-pair-device .ui-btn-utility {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  padding: 0;
-}
-
-.director-lab-pair-dialog .ui-input-pill,
-.director-lab-pair-dialog .ui-select-pill {
-  height: 44px;
+.director-lab-pair-code {
+  display: grid;
+  width: 264px;
+  height: 264px;
+  place-items: center;
   border-radius: 12px;
+  background: #fff;
+}
+
+.director-lab-pair-code img {
+  display: block;
+  width: 240px;
+  height: 240px;
+  image-rendering: pixelated;
+}
+
+.director-lab-pair-hint,
+.director-lab-pair-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.director-lab-pair-hint {
+  color: var(--text-secondary, #8f9299);
+}
+
+.director-lab-pair-error {
+  color: var(--red, #e53e3e);
 }
 
 .director-lab-pair-dialog .ui-dialog-footer .ui-btn {
   min-height: 44px;
-}
-
-.director-lab-pair-code {
-  letter-spacing: 0.2em;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.director-lab-pair-error {
-  margin: 0;
-  color: var(--red, #e53e3e);
-  font-size: 12px;
-  line-height: 1.45;
 }

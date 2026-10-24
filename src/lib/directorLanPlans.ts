@@ -1,5 +1,6 @@
 import type { DirectorLanPlanAttribute, DirectorLanPlanSummary, DirectorPlanSchema, DirectorLanPlansResponse, DirectorLanShot } from '../shared/types'
 import { DIRECTOR_PLAN_ATTRIBUTES } from '../lib/directorPlanSync'
+import { normalizeDirectorMovementReference } from './directorMovementReference'
 
 export function normalizeEndpoint(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
@@ -144,6 +145,7 @@ function normalizeRemotePlan(
               description: descriptions.get(attribute.id) ?? descriptions.get(attribute.name) ?? '',
             })),
         remark: typeof shot.remark === 'string' ? shot.remark : '',
+        movement_reference: normalizeDirectorMovementReference(shot.movement_reference),
         takes: shot.takes.map((take) => ({
           ...take,
           stream_url: normalizeServiceUrl(endpoint, take.stream_url),
