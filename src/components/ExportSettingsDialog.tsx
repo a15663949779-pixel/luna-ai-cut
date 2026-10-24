@@ -26,7 +26,7 @@ interface ExportSettingsDialogProps {
   }
   initialConfig?: VideoExportSettings
   allowedFormats?: VideoExportFormat[]
-  outputAvailability?: { video: boolean; photo: boolean; live: boolean }
+  outputAvailability?: { video: boolean; photo: boolean; live: boolean; livePhotoVideo?: boolean }
   onConfirm: (config: VideoExportSettings) => void | boolean | Promise<void | boolean>
 }
 
@@ -81,6 +81,7 @@ export function ExportSettingsDialog({
   const liveAvailable = outputAvailability?.live ?? Boolean(livePhotoSource)
   const hasSelectedOutput = (videoAvailable && exportConfig.exportFormats.includes('video'))
     || (photoAvailable && exportConfig.exportPhotos)
+    || (outputAvailability?.livePhotoVideo === true && exportConfig.exportLiveVideo)
     || (liveAvailable && liveSelected)
   const livePhotoInvalid = !hasSelectedOutput
     || (liveSelected && livePhotoSource && selectedDuration < 3)

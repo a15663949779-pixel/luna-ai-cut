@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Clock3, Copy } from 'lucide-react'
 import type { DirectorLanShot, DirectorLanTake } from '../shared/types'
 import { normalizeDirectorShotFields } from '../lib/directorShotFields'
@@ -15,12 +15,13 @@ interface Props {
   selectedId?: string
   disabled?: boolean
   showMovementReference?: boolean
+  markerPanel?: ReactNode
   onSelect: (take: DirectorLanTake) => void
   onAddMaterials: () => void
   onDeleteMaterial?: (take: DirectorLanTake) => Promise<void>
 }
 
-export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, showMovementReference = true, onSelect, onAddMaterials, onDeleteMaterial }: Props) {
+export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, showMovementReference = true, markerPanel, onSelect, onAddMaterials, onDeleteMaterial }: Props) {
   const [deleteCandidate, setDeleteCandidate] = useState<DirectorLanTake | null>(null)
   const [deleting, setDeleting] = useState(false)
   const deleteMaterial = async () => {
@@ -56,6 +57,7 @@ export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, 
       <span>镜头构图</span>
       <DirectorMovementReferencePreview reference={shot.movement_reference} showHint />
     </section>}
+    {markerPanel}
     <DirectorTakeList takes={takes} selectedId={selectedId} disabled={disabled || deleting} onSelect={onSelect} onAddMaterials={onAddMaterials}
       onDelete={onDeleteMaterial ? setDeleteCandidate : undefined} />
   </aside>

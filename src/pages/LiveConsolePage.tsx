@@ -142,16 +142,23 @@ export function LiveConsolePage({ windowLiveMode, onWindowLiveModeChange }: Live
         </div>
       </header>
 
-      {visibleError && <p className="live-console-error" role="alert" data-live-window-controls>{visibleError}</p>}
       {!status ? (
-        windowLiveMode ? null : <LoadingIndicator label="正在检查直播状态" />
+        <>
+          {visibleError && <p className="live-console-error" role="alert" data-live-window-controls>{visibleError}</p>}
+          {windowLiveMode ? null : <LoadingIndicator label="正在检查直播状态" />}
+        </>
       ) : (
         <LiveControlPanel
           status={status}
           busy={busy}
+          consoleError={visibleError}
           onPreviewErrorChange={setPreviewError}
           onStatusChanged={() => void refreshStatus()}
           onStart={() => void runAction(async () => {
+            if (status.receiverConnected && (previewError || status.localPreviewError || status.error)) {
+              flushLiveUsage()
+              await window.luna.liveStream.stop()
+            }
             await window.luna.liveStream.start()
             toast.success('已开始获取画面')
           })}

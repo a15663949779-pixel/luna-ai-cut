@@ -16,6 +16,8 @@ export interface VideoExportSettings {
   exportFormats: VideoExportFormat[]
   /** 混合导出计划中是否包含图片素材和视频照片标记。 */
   exportPhotos: boolean
+  /** 导出 Live Photo 素材时，是否额外保存内嵌视频。 */
+  exportLiveVideo: boolean
   /** Live 图在裁剪后视频中的 3 秒片段起点。 */
   liveStartTime: number
   /** Live 图封面相对于 3 秒片段起点的时间。 */
@@ -39,6 +41,7 @@ export const DEFAULT_VIDEO_EXPORT_SETTINGS: VideoExportSettings = {
   includeAudio: true,
   exportFormats: ['video'],
   exportPhotos: true,
+  exportLiveVideo: false,
   liveStartTime: 0,
   liveCoverTime: 1.5,
   trimStartTime: 0,
@@ -53,6 +56,7 @@ export function lockDolbyVisionExportSettings(settings: VideoExportSettings): Vi
     quality: 'original',
     exportFormats: ['video'],
     exportPhotos: false,
+    exportLiveVideo: false,
     liveStartTime: 0,
     trimStartTime: 0,
     trimEndTime: undefined,

@@ -6,7 +6,6 @@ import {
   type VideoExportSettings,
   type WorkspaceMediaAsset,
   type WorkspaceProject,
-  type WorkspaceProjectAsset,
 } from '../shared/types'
 import type { WorkspacePreviewQuality } from '../shared/types/settings'
 import { useApp } from '../context/AppContext'
@@ -36,7 +35,7 @@ import { WorkspaceCreativeFactory } from '../workspace/creative/WorkspaceCreativ
 import { CropOverlay } from '../workspace/transform/CropOverlay'
 import { TrimStrip } from '../workspace/trim/TrimStrip'
 import type { LivePhotoSelection } from '../workspace/trim/TrimPanel'
-import { buildVideoOutputExportItems, findInvalidVideoOutputMarker, livePhotoSelectionForMarker } from '../workspace/trim/videoOutputMarkers'
+import { livePhotoSelectionForMarker } from '../workspace/trim/videoOutputMarkers'
 import { constrainTrimEnd, constrainTrimStart, frameIndexAtTime, snapTimeToFrame, sourceEndFrame, timeAtFrame } from '../workspace/trim/frameTime'
 import { MaskOverlay } from '../workspace/mask/MaskOverlay'
 import { BeautyMaskOverlay } from '../workspace/beauty/BeautyMaskOverlay'
@@ -46,7 +45,6 @@ import { buildResolvedWatermarkStaticLayer } from '../components/WatermarkSettin
 import { buildBorderLayer } from '../workspace/border/buildBorderLayer'
 import { applyLocalColorToSourceMediaLayers, applyReferenceMatchToSourceMediaLayers, outputSizeForTransform, pipelineColorToRenderColor, pipelineTransformToRenderTransform, placeWatermarkOnFramedContent } from '../workspace/shared/renderLayerPipeline'
 import type { MediaMetadata } from '../shared/types'
-import { buildWorkspaceExportLayers } from '../workspace/shared/workspaceExportLayers'
 import { buildSubtitleLayers } from '../workspace/subtitles/subtitleLayers'
 import {
   queueWorkspaceMixedExport,
@@ -59,7 +57,7 @@ import { createWorkspaceDefaultPipeline } from '../workspace/shared/workspaceDef
 import { isDeviceRestoreLut } from '../workspace/lut/restoreLuts'
 import type { DeviceLutRestoreConfig } from '../shared/types/device'
 import { borderTitleForDevice, isLegacyBorderTitle } from '../shared/insta360DeviceProfiles'
-import { activeRemovalOperation, latestReadyRemovalOperation } from '../workspace/removal/removalOperations'
+import { buildWorkspaceMixedExportPlan, workspaceProjectSourcePath } from '../workspace/shared/workspaceExportPlan'
 import { beautyClipboardSettings } from '../workspace/beauty/beautyLayers'
 import { prepareBeautyPasteTargets } from '../workspace/beauty/beautyPaste'
 import { logger } from '../lib/rendererLogger'
@@ -78,11 +76,6 @@ function normalizePipeline(
     pipeline.logRestore.activeId = null
   }
   return pipeline
-}
-
-function removalSourcePath(asset: WorkspaceProjectAsset | undefined): string | undefined {
-  if (!asset) return undefined
-  return latestReadyRemovalOperation(asset.removal?.operations ?? [])?.resultPath ?? asset.path
 }
 
 /** 从 MediaMetadata 中按 key 提取第一个匹配的 EXIF 值 */
@@ -203,7 +196,7 @@ function WorkspacePageInner({ creativeModeId, onCreativeModeChange, pageActive }
   referenceAssetRef.current = media.referenceAsset
   const activeProjectAsset = media.currentProject?.assets[media.activeIndex]
   // 消除结果是独立图片；对比时必须回到源图片，不能只清除调色参数。
-  const activeSourcePath = (edit.compareOriginal ? activeProjectAsset?.path : removalSourcePath(activeProjectAsset)) ?? media.activeMedia?.path
+  const activeSourcePath = (edit.compareOriginal ? activeProjectAsset?.path : workspaceProjectSourcePath(activeProjectAsset)) ?? media.activeMedia?.path
 
   const enterImmersive = useCallback(() => {
     setImmersive(true)
@@ -980,125 +973,18 @@ function WorkspacePageInner({ creativeModeId, onCreativeModeChange, pageActive }
       const trackedActiveMasks = isVideoPath(media.activeMedia.path)
         ? await mask.prepareVideoMasksForExport()
         : activePipeline.colorMasks
-      const sourceGroups = await Promise.all(exportIndices.map(async (index): Promise<WorkspaceMixedExportPlanItem[]> => {
-        const asset = media.media[index]
-        const projectAsset = media.currentProject?.assets[index]
-        const activeRemoval = activeRemovalOperation(projectAsset?.removal?.operations ?? [])
-        if (activeRemoval?.status === 'needs-regeneration') throw new Error(`${asset.name} 的消除结果需要重新生成`)
-        const sourcePath = removalSourcePath(media.currentProject?.assets[index]) ?? asset.path
-        const pipeline = index === media.activeIndex
+      const plan = await buildWorkspaceMixedExportPlan({
+        assets: media.media,
+        projectAssets: media.currentProject?.assets,
+        exportIndices,
+        getPipeline: (asset, index) => index === media.activeIndex
           ? mergePipeline(activePipeline, { colorMasks: trackedActiveMasks })
-          : normalizePipeline((asset as { pipeline?: unknown }).pipeline, defaultPipelineRef.current)
-        const resolution = await window.luna.workspace.getMediaResolution(sourcePath)
-        const sourceDuration = isVideoPath(asset.path)
-          ? await window.luna.workspace.getVideoDuration(asset.path).catch(() => 0)
-          : 0
-        if (isVideoPath(asset.path) && sourceDuration <= 0) {
-          throw new Error(`无法读取 ${asset.name} 的视频时长`)
-        }
-        const trimStart = pipeline.trim?.startTime ?? 0
-        const trimEnd = pipeline.trim?.endTime ?? sourceDuration
-        const outputBaseName = asset.name.replace(/\.[^.]+$/, '') || 'export'
-        const borderMeta = pipeline.border?.enabled
-          ? await window.luna.getMediaMetadataByPath(asset.path).catch(() => null)
-          : null
-        const untrimmedPipeline = isVideoPath(asset.path) ? mergePipeline(pipeline, { trim: null }) : pipeline
-        const layers = buildWorkspaceExportLayers(sourcePath, resolution, untrimmedPipeline, borderMeta, true, projectAsset?.subtitles, asset)
-        const outputSize = outputSizeForTransform(resolution, untrimmedPipeline.transform)
-        logger.info('[导出诊断] 工作台尺寸参数', {
-          assetPath: asset.path,
-          sourcePath,
-          sourceResolution: resolution,
-          outputSize,
-          resolutionSetting: '待导出弹窗选择',
-          transform: {
-            orientation: untrimmedPipeline.transform.orientation,
-            crop: untrimmedPipeline.transform.crop,
-          },
-        })
-
-        if (!isVideoPath(asset.path)) {
-          return [{
-            id: `${asset.id}-image`,
-            kind: 'photo',
-            sourcePath,
-            outputBaseName,
-            layers,
-            outputSize,
-          }]
-        }
-
-        const invalidMarker = findInvalidVideoOutputMarker(pipeline.outputMarkers, sourceDuration)
-        if (invalidMarker) {
-          throw new Error(`${asset.name} 的第 ${invalidMarker.index + 1} 个${invalidMarker.label}无效：${invalidMarker.reason}`)
-        }
-        const markerItems = buildVideoOutputExportItems(outputBaseName, pipeline.outputMarkers, sourceDuration)
-        if (markerItems.length !== pipeline.outputMarkers.length) {
-          throw new Error(`${asset.name} 有无效的导出标记，请调整后再导出`)
-        }
-        const normalizedTrimStart = Math.max(0, Math.min(trimStart, Math.max(0, sourceDuration - 0.1)))
-        const normalizedTrimEnd = Math.max(
-          normalizedTrimStart + Math.min(0.1, sourceDuration - normalizedTrimStart),
-          Math.min(trimEnd, sourceDuration),
-        )
-        const videoMarkerItems = markerItems.filter((item) => item.kind === 'video')
-        const videoItems: WorkspaceMixedExportPlanItem[] = videoMarkerItems.length > 0
-          ? videoMarkerItems.map((item) => ({
-              id: `${asset.id}-${item.markerId}`,
-              kind: 'video',
-              sourcePath,
-              outputBaseName: item.outputBaseName,
-              layers,
-              outputSize,
-              sourceDuration,
-              startTime: item.startTime,
-              endTime: item.endTime,
-            }))
-          : [{
-              id: `${asset.id}-video`,
-              kind: 'video',
-              sourcePath,
-              outputBaseName,
-              layers,
-              outputSize,
-              sourceDuration,
-              startTime: normalizedTrimStart,
-              endTime: normalizedTrimEnd,
-            }]
-
-        const markedItems: WorkspaceMixedExportPlanItem[] = markerItems
-          .filter((item) => item.kind !== 'video')
-          .map((item) => item.kind === 'photo' ? {
-            id: `${asset.id}-${item.markerId}`,
-            kind: 'photo',
-            sourcePath,
-            outputBaseName: item.outputBaseName,
-            layers,
-            outputSize,
-            sourceDuration,
-            time: item.time,
-          } : {
-            id: `${asset.id}-${item.markerId}`,
-            kind: 'live',
-            sourcePath,
-            outputBaseName: item.outputBaseName,
-            layers,
-            outputSize,
-            sourceDuration,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            coverTime: item.coverTime,
-          })
-        return [...videoItems, ...markedItems]
-      }))
-      const plan = sourceGroups.flat()
+          : normalizePipeline((asset as { pipeline?: unknown }).pipeline, defaultPipelineRef.current),
+      })
       const summary = summarizeWorkspaceMixedExport(plan)
-      if (summary.photo > 0 && summary.video === 0 && summary.live === 0) {
+      if (summary.photo > 0 && summary.video === 0 && summary.live === 0 && summary.livePhotos === 0 && !settings.chooseTransferDirectoryBeforeAction) {
         const exportDir = await resolveTransferDirectory('export', settings)
         if (!exportDir) return
-        if (settings.chooseTransferDirectoryBeforeAction) {
-          await rememberTransferDirectory('export', exportDir, settings)
-        }
         const result = await queueWorkspaceMixedExport(plan, exportDir, {
           ...DEFAULT_VIDEO_EXPORT_SETTINGS,
           exportFormats: [],
@@ -1534,6 +1420,7 @@ function WorkspacePageInner({ creativeModeId, onCreativeModeChange, pageActive }
           video: exportDialogSummary.video > 0,
           photo: exportDialogSummary.photo > 0,
           live: exportDialogSummary.live > 0,
+          livePhotoVideo: exportDialogSummary.livePhotos > 0,
         }}
         onConfirm={async (config) => {
           const currentSettings = await window.luna.getSettings()

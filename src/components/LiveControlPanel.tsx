@@ -36,6 +36,7 @@ function previewPoint(event: ReactPointerEvent<HTMLDivElement>, rect: DOMRect): 
 interface LiveControlPanelProps {
   status: LiveStreamStatus
   busy: boolean
+  consoleError: string | null
   onStart: () => void
   onStatusChanged: () => void
   onPreviewErrorChange: (error: string | null) => void
@@ -44,6 +45,7 @@ interface LiveControlPanelProps {
 export function LiveControlPanel({
   status,
   busy,
+  consoleError,
   onStart,
   onStatusChanged,
   onPreviewErrorChange,
@@ -286,7 +288,7 @@ export function LiveControlPanel({
               <ol>
                 <li>
                   <span>1</span>
-                  <p>打开 Luna 咔，连接相机</p>
+                  <p>打开 Luna 咔，连接相机，停留在拍摄页</p>
                   {!status.receiverConnected && (
                     <MobileAppDownloadButton size="mini" />
                   )}
@@ -325,6 +327,10 @@ export function LiveControlPanel({
 
       <aside className="live-control-pane" data-live-window-controls aria-label="直播设置">
         <AndroidUsbConnectionMode status={status} onChanged={onStatusChanged} />
+        {consoleError && <p className="live-control-error" role="alert">{consoleError}</p>}
+        {(status.state === 'waiting-usb' || status.state === 'error' || previewError || status.localPreviewError) && (
+          <Button variant="secondary" size="compact" onClick={onStart} disabled={busy}>重试</Button>
+        )}
         <div className="live-settings-tabs">
           <SegmentedControl
             ariaLabel="直播设置面板"

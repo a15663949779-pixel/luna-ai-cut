@@ -6,6 +6,7 @@
  *  用法：node landing/generate-changelog.cjs
  */
 
+/* eslint-disable @typescript-eslint/no-var-requires, no-undef */
 const fs = require('fs')
 const path = require('path')
 
@@ -116,7 +117,7 @@ const entries = files.map((f) => {
 // ── 写出 JS 数据文件 ──────────────────────
 const js = `// 自动生成 — 由 generate-changelog.cjs 创建
 // 用法: node landing/generate-changelog.cjs
-const CHANGELOG_DATA = ${JSON.stringify(entries, null, 2)}
+globalThis.CHANGELOG_DATA = ${JSON.stringify(entries, null, 2)}
 `
 
 fs.writeFileSync(OUTPUT, js, 'utf-8')

@@ -8,6 +8,7 @@ import {
   cacheDir,
   deleteLocalFiles,
   downloadFiles,
+  extractLivePhotoImage,
   getLocalResourcesDir,
   getMediaMetadata,
   getSettings,
@@ -405,6 +406,10 @@ export function register(ctx: IpcContext): void {
     return ctx.enqueuePreviewTask(async () => {
       return previewLivePhoto(sourceUrl)
     }, 2)
+  })
+
+  ipcMain.handle('luna:extractLivePhotoImage', async (_event, sourceUrl: string) => {
+    return ctx.enqueuePreviewTask(async () => extractLivePhotoImage(sourceUrl), 2)
   })
 
   ipcMain.handle('luna:metadata', async (_event, file: LunaFile, cachedPath?: string | null) => {

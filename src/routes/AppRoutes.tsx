@@ -18,6 +18,7 @@ import { DeviceConnectPage } from '../pages/DeviceConnectPage'
 import { LocalMediaPage } from '../pages/LocalMediaPage'
 import { AiSelectionPage } from '../pages/AiSelectionPage'
 import { ProjectsPage } from '../pages/ProjectsPage'
+import { LabPage } from '../pages/LabPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
 import { LiveConsolePage } from '../pages/LiveConsolePage'
@@ -110,6 +111,7 @@ export function AppRoutes() {
     ['/local-resources', true],
     ['/ai-selection', true],
     ['/projects', true],
+    ['/lab', true],
     ['/workspace', true],
     ['/live-console', true],
     ['/settings', true],
@@ -137,7 +139,7 @@ export function AppRoutes() {
   }, [activePath, isKnownRoute, location.pathname, settingsRoute])
 
   // ── 特殊处理 ──
-  if (['/lab', '/ai-director', '/ai-shooting', '/ai-editor'].includes(location.pathname)) {
+  if (['/ai-director', '/ai-shooting', '/ai-editor'].includes(location.pathname)) {
     return <Navigate to="/projects" replace state={location.state} />
   }
   if (location.pathname === '/') return <Navigate to="/library" replace />
@@ -204,6 +206,10 @@ export function AppRoutes() {
 
         <AppRoute path="/projects" preserve>
           <ProjectsPage active={isActive('/projects')} />
+        </AppRoute>
+
+        <AppRoute path="/lab">
+          <LabPage pageActive={isActive('/lab')} />
         </AppRoute>
 
         <AppRoute path="/workspace">

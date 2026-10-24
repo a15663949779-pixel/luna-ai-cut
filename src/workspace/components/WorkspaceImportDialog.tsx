@@ -17,7 +17,6 @@ interface WorkspaceImportDialogProps {
   existingPaths: Set<string>
   onImport: (assets: WorkspaceMediaAsset[]) => void | Promise<void>
   mode?: 'import' | 'create'
-  purpose?: 'workspace' | 'ai-editor'
   projectName?: string
   onProjectNameChange?: (value: string) => void
 }
@@ -40,7 +39,6 @@ export function WorkspaceImportDialog({
   existingPaths,
   onImport,
   mode = 'import',
-  purpose = 'workspace',
   projectName = '',
   onProjectNameChange,
 }: WorkspaceImportDialogProps) {
@@ -74,19 +72,14 @@ export function WorkspaceImportDialog({
         cameraType: file.cameraType,
         cameraSerial: file.cameraSerial,
         watermarkProfileId: file.watermarkProfileId,
-        // 视频原文件不能作为 <img> 缩略图；AI 剪辑宿主会为视频生成独立首帧。
-        thumbnailUrl: file.kind === 'image' && thumbnailPath
-          ? (file.thumbnailUrl ?? filePathToPreviewUrl(thumbnailPath))
-          : null,
+        thumbnailUrl: thumbnailPath ? filePathToPreviewUrl(thumbnailPath) : null,
         isLivePhoto: file.isLivePhoto,
-        duration: file.duration ?? 0,
-        frameRate: file.frameRate ?? 0,
-        fileSize: file.bytes ?? 0,
+        frameRate: file.frameRate,
       })
       return result
     }, [])
     if (assets.length === 0) {
-      toast.error(purpose === 'ai-editor' ? '请选择素材' : '请选择尚未加入工作台的素材')
+      toast.error('请选择尚未加入工作台的素材')
       return
     }
     setImporting(true)

@@ -21,7 +21,7 @@ interface ExportSettingsPanelProps {
     outputSize: { width: number; height: number }
   }
   allowedFormats?: VideoExportFormat[]
-  outputAvailability?: { video: boolean; photo: boolean; live: boolean }
+  outputAvailability?: { video: boolean; photo: boolean; live: boolean; livePhotoVideo?: boolean }
   dolbyVisionAvailable?: boolean
   dolbyVisionChecking?: boolean
   showILogRestore?: boolean

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { createHash } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { localThumbnailUrl, safeName } from '../media/filePathUtils'
@@ -170,6 +171,44 @@ async function extractEmbeddedLivePhotoVideo(livPath: string, destination: strin
   await fs.writeFile(partialPath, data.subarray(mp4Offset))
   await fs.rename(partialPath, destination)
   return destination
+}
+
+async function extractEmbeddedLivePhotoImage(livPath: string, destination: string): Promise<string | null> {
+  const data = await fs.readFile(livPath)
+  const ftypOffset = data.indexOf(Buffer.from('ftyp', 'ascii'))
+  const mp4Offset = ftypOffset - 4
+  if (ftypOffset < 4 || mp4Offset <= 2) return null
+  if (data[mp4Offset - 2] !== 0xFF || data[mp4Offset - 1] !== 0xD9) return null
+
+  const partialPath = partialPathFor(destination)
+  await fs.mkdir(path.dirname(destination), { recursive: true })
+  await fs.rm(partialPath, { force: true })
+  await fs.writeFile(partialPath, data.subarray(0, mp4Offset))
+  try {
+    await fs.rename(partialPath, destination)
+  } catch (error) {
+    if (!(await fileExists(destination))) throw error
+    await fs.rm(partialPath, { force: true })
+  }
+  return destination
+}
+
+export async function extractLivePhotoImage(source: string): Promise<string> {
+  const livePhotoPath = source.startsWith('file:') ? fileURLToPath(source) : source
+  if (!(await fileExists(livePhotoPath))) throw new Error('Live 图文件不存在')
+
+  const stats = await fs.stat(livePhotoPath)
+  const sourceKey = createHash('sha256')
+    .update(`${path.resolve(livePhotoPath)}\0${stats.size}\0${stats.mtimeMs}`)
+    .digest('hex')
+    .slice(0, 16)
+  const cacheDir = await previewCacheDir()
+  const imagePath = path.join(cacheDir, `${safeName(path.basename(livePhotoPath))}.${sourceKey}.live.jpg`)
+  if (await fileExists(imagePath)) return imagePath
+
+  const extractedPath = await extractEmbeddedLivePhotoImage(livePhotoPath, imagePath)
+  if (!extractedPath) throw new Error('无法从 Live 图中提取静态照片')
+  return extractedPath
 }
 
 function logFinalDownloadSuccess(
@@ -438,19 +477,24 @@ export async function cacheFile(file: LunaFile): Promise<string | null> {
 }
 
 export async function previewLivePhoto(source: string): Promise<PreviewResult> {
-  const fileName = path.basename(source.startsWith('file:') ? fileURLToPath(source) : source)
+  const livPath = source.startsWith('file:') ? fileURLToPath(source) : source
+  const fileName = path.basename(livPath)
   const videoName = `${fileName}.live.mp4`
   const cacheDir = await previewCacheDir()
   await fs.mkdir(cacheDir, { recursive: true })
-  const embeddedLivePath = path.join(cacheDir, `${safeName(fileName)}.live.mp4`)
+  if (!(await fileExists(livPath))) {
+    return { fileName, kind: 'image', source: null, cachedPath: null, message: 'Live 图文件不存在' }
+  }
+
+  const sourceStats = await fs.stat(livPath)
+  const sourceKey = createHash('sha256')
+    .update(`${path.resolve(livPath)}\0${sourceStats.size}\0${sourceStats.mtimeMs}`)
+    .digest('hex')
+    .slice(0, 16)
+  const embeddedLivePath = path.join(cacheDir, `${safeName(fileName)}.${sourceKey}.live.mp4`)
 
   if (await fileExists(embeddedLivePath)) {
     return { fileName: videoName, kind: 'video', source: localThumbnailUrl(embeddedLivePath), cachedPath: embeddedLivePath }
-  }
-
-  const livPath = source.startsWith('file:') ? fileURLToPath(source) : source
-  if (!(await fileExists(livPath))) {
-    return { fileName, kind: 'image', source: null, cachedPath: null, message: 'Live 图文件不存在' }
   }
 
   const extractedPath = await extractEmbeddedLivePhotoVideo(livPath, embeddedLivePath)

@@ -23,6 +23,7 @@ interface DirectorLabViewProps {
   onPlansChange?(plans: DirectorLanPlanSummary[]): void
   onSelectPlan?(planId: string | null): void
   onReturnToProjects?(): void
+  onBack?(): void
   onConnectedEndpointChange?(endpoint: string | null): void
   pairingOpen?: boolean
   onPairingOpenChange?(open: boolean): void
@@ -46,7 +47,7 @@ function formatPlanCreatedAt(value: string | null | undefined): string {
 
 
 export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelectPlan,
-  onReturnToProjects, onConnectedEndpointChange, pairingOpen = false, onPairingOpenChange,
+  onReturnToProjects, onBack, onConnectedEndpointChange, pairingOpen = false, onPairingOpenChange,
   refreshKey, createPlanKey = 0 }: DirectorLabViewProps) {
   const {
     handlePlanDeleted,
@@ -141,13 +142,17 @@ export function DirectorLabView({ active, selectedPlanId, onPlansChange, onSelec
     <div className="lab-page lab-director-page">
       <header className="lab-director-page-header">
         <div className="lab-title-block">
-          {activePlan && <Tooltip content="返回计划列表">
+          {(activePlan || onBack) && <Tooltip content={activePlan ? '返回计划列表' : '返回实验室'}>
             <IconButton
               variant="ghost"
               size="compact"
               icon={<ArrowLeft size={15} />}
-              aria-label="返回计划列表"
+              aria-label={activePlan ? '返回计划列表' : '返回实验室'}
               onClick={() => {
+                if (onBack && !activePlan) {
+                  onBack()
+                  return
+                }
                 if (onReturnToProjects) {
                   onReturnToProjects()
                   return

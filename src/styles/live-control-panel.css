@@ -139,6 +139,15 @@
   color: #fff;
 }
 
+.live-control-error {
+  flex: 0 0 auto;
+  margin: 6px 0 0;
+  color: var(--red, #e53e3e);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .live-settings-tabs {
   flex: 0 0 auto;
   padding: 0;

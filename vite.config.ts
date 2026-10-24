@@ -6,6 +6,10 @@ import react from '@vitejs/plugin-react'
 import { inlineStartupVideo } from './scripts/vite-inline-startup-video'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
+const electronEntryPaths = new Set([
+  path.resolve(__dirname, 'electron/main.ts'),
+  path.resolve(__dirname, 'electron/appMain.ts'),
+].map((entry) => entry.replaceAll('\\', '/')))
 
 function copyLocalShareAssets() {
   return {
@@ -17,6 +21,30 @@ function copyLocalShareAssets() {
         path.resolve(__dirname, 'dist/local-share'),
         { recursive: true },
       )
+    },
+  }
+}
+
+// Hot updates live outside app.asar, so Node cannot resolve installation-only
+// dependencies relative to their JS files. Always resolve them from the app.
+function installedElectronDependencies() {
+  const prefix = '\0luna-installed:'
+  return {
+    name: 'luna-installed-electron-dependencies',
+    // vite:resolve runs before ordinary plugins, so a bare specifier would
+    // already be resolved into node_modules and inlined into the ESM output.
+    // Only a pre plugin can take over `usb` / `ws` before that happens.
+    enforce: 'pre' as const,
+    resolveId(id: string) {
+      return id === 'usb' || id === 'ws' ? `${prefix}${id}` : null
+    },
+    load(id: string) {
+      if (!id.startsWith(prefix)) return null
+      const dependency = id.slice(prefix.length)
+      return `import { app } from 'electron';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+export default createRequire(join(app.getAppPath(), 'package.json'))(${JSON.stringify(dependency)});`
     },
   }
 }
@@ -35,7 +63,7 @@ export default defineConfig({
         entry: 'electron/main.ts',
         onstart: process.env.LUNA_DEV_NO_AUTO_START === '1' ? () => undefined : undefined,
         vite: {
-          plugins: [inlineStartupVideo()],
+          plugins: [inlineStartupVideo(), installedElectronDependencies()],
           base: './',
           worker: {
             format: 'es',
@@ -48,9 +76,16 @@ export default defineConfig({
           },
           build: {
             rollupOptions: {
-              external: ['usb', 'ws'],
+              // Keep bootstrap side effects in main.js, which is deliberately
+              // excluded from hot archives; shared chunks must not boot again.
+              preserveEntrySignatures: 'strict',
               output: {
                 chunkFileNames: 'luna-[name].js',
+                onlyExplicitManualChunks: true,
+                manualChunks(id) {
+                  if (electronEntryPaths.has(id.replaceAll('\\', '/'))) return
+                  return 'runtime'
+                },
               },
             },
           },

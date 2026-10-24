@@ -3,9 +3,11 @@ import type { DirectorLabDownloadProgress, DirectorLanPlanSummary, DirectorLanSh
 import { toast } from '../ui'
 import { DirectorVideoRangeEditor } from './DirectorVideoRangeEditor'
 import { directorPreviewPath } from '../lib/directorMediaSource'
+import { directorPlanWithTakeRange, type DirectorTakeRange } from '../lib/directorTakeRange'
 import { directorPlanContentSignature } from '../lib/directorPlanSync'
+import { directorPlanWithTakeMarkers } from '../lib/directorTakeMarkers'
 import { directorPlanWithTakeReview } from '../lib/directorTakeReview'
-import type { DirectorTakeReview } from '../shared/types/directorLab'
+import type { DirectorTakeMarker, DirectorTakeReview } from '../shared/types/directorLab'
 import './DirectorMediaPreviewDialog.css'
 
 interface DirectorMediaPreviewDialogProps {
@@ -56,6 +58,17 @@ export function DirectorMediaPreviewDialog({ plan, onLocalPlanChange, onWriteSta
       : (await window.luna.directorLab.preparePreview({ url: take.stream_url, cacheKey: take.stream_url })).url
     return directorPreviewPath(url)
   }, [take])
+  const saveRange = async (range: DirectorTakeRange) => {
+    const expected = plan.local_content_signature ?? directorPlanContentSignature(plan)
+    const next = directorPlanWithTakeRange(plan, take.id, range)
+    onWriteStateChange(plan.id, true)
+    try {
+      const saved = await window.luna.directorLab.saveLocalPlan({ ...next,
+        synced_signature: plan.synced_signature ?? directorPlanContentSignature(plan),
+      }, expected)
+      onLocalPlanChange(saved)
+    } finally { onWriteStateChange(plan.id, false) }
+  }
   const deleteMaterial = async (material: DirectorLanTake) => {
     onWriteStateChange(plan.id, true)
     try {
@@ -65,6 +78,16 @@ export function DirectorMediaPreviewDialog({ plan, onLocalPlanChange, onWriteSta
         const next = saved.shots.find(item => item.id === shot.id)?.takes.find(item => item.available && item.stream_url)
         if (next) onSelectTake(next)
       }
+    } finally { onWriteStateChange(plan.id, false) }
+  }
+  const saveMarkers = async (markers: DirectorTakeMarker[]) => {
+    const expected = plan.local_content_signature ?? directorPlanContentSignature(plan)
+    const next = directorPlanWithTakeMarkers(plan, take.id, markers)
+    onWriteStateChange(plan.id, true)
+    try {
+      const saved = await window.luna.directorLab.saveLocalPlan({ ...next,
+        synced_signature: plan.synced_signature ?? directorPlanContentSignature(plan) }, expected)
+      onLocalPlanChange(saved)
     } finally { onWriteStateChange(plan.id, false) }
   }
   const saveReview = async (review: DirectorTakeReview) => {
@@ -78,6 +101,7 @@ export function DirectorMediaPreviewDialog({ plan, onLocalPlanChange, onWriteSta
     } finally { onWriteStateChange(plan.id, false) }
   }
   return <DirectorVideoRangeEditor take={take} shot={shot} takes={takes} source={source}
-    onSaveReview={saveReview} onSelectTake={onSelectTake} onClose={onClose} phoneConnected={phoneConnected}
-    adding={adding} onAddMaterials={() => void addMaterials()} onDeleteMaterial={deleteMaterial} />
+    onSave={saveRange} onSelectTake={onSelectTake} onClose={onClose} phoneConnected={phoneConnected}
+    adding={adding} onAddMaterials={() => void addMaterials()} onDeleteMaterial={deleteMaterial}
+    onSaveMarkers={saveMarkers} onSaveReview={saveReview} />
 }
