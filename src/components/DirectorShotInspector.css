@@ -1,0 +1,15 @@
+.lab-viewer-shot-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lab-viewer-shot-title-row h3 {
+  flex: 1;
+  min-width: 0;
+}
+
+.lab-viewer-shot-title-row .ui-btn {
+  flex: none;
+}

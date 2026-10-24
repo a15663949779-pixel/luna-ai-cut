@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Clock3 } from 'lucide-react'
+import { Clock3, Copy } from 'lucide-react'
 import type { DirectorLanShot, DirectorLanTake } from '../shared/types'
 import { normalizeDirectorShotFields } from '../lib/directorShotFields'
+import { buildDirectorShotCopyText } from '../lib/directorShotCopy'
 import { DirectorTakeList } from './DirectorTakeList'
 import { DirectorMovementReferencePreview } from './director-movement-reference/DirectorMovementReferencePreview'
 import { Button, Dialog, toast } from '../ui'
 import './DirectorMediaPreviewDialog.css'
+import './DirectorShotInspector.css'
 
 interface Props {
   shot: DirectorLanShot
@@ -29,8 +31,22 @@ export function DirectorShotInspector({ shot, takes, selectedId = '', disabled, 
     finally { setDeleting(false) }
   }
   const fields = normalizeDirectorShotFields(shot)
+  const copyShot = async () => {
+    try {
+      await window.luna.copyText(buildDirectorShotCopyText(shot))
+      toast.success('已复制镜头信息')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '复制失败')
+    }
+  }
   return <><aside className="lab-director-inspector" aria-label="镜头信息">
-    <div className="lab-viewer-shot-heading"><span>镜头 {shot.order}</span><h3>{shot.name}</h3></div>
+    <div className="lab-viewer-shot-heading">
+      <span>镜头 {shot.order}</span>
+      <div className="lab-viewer-shot-title-row">
+        <h3>{shot.name}</h3>
+        <Button variant="ghost" size="mini" icon={<Copy size={13} />} onClick={() => void copyShot()}>复制镜头</Button>
+      </div>
+    </div>
     <div className="lab-viewer-shot-duration"><Clock3 size={14} /><span>建议时长 {shot.duration_ms / 1000} 秒</span></div>
     {fields.attributes.map(field => <section className="lab-viewer-shot-section" key={field.id}>
       <span>{field.name}</span><p>{field.description}</p>

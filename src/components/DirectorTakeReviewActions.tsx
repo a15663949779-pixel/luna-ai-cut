@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock3, Heart, MessageCircle } from 'lucide-react'
+import { Clock3, Heart, MessageCircle, Pencil, Trash2 } from 'lucide-react'
 import type { DirectorTakeReview } from '../shared/types/directorLab'
 import { EMPTY_DIRECTOR_TAKE_REVIEW, validateDirectorTakeReview } from '../lib/directorTakeReview'
 import { Button, Dialog, IconButton, Input, toast } from '../ui'
@@ -19,16 +19,19 @@ interface Props {
 export function DirectorTakeReviewActions({ review: rawReview, video, positionMs, durationMs, disabled, onPause, onSeek, onSave }: Props) {
   const review = rawReview ?? EMPTY_DIRECTOR_TAKE_REVIEW
   const [editing, setEditing] = useState<{ momentId: string | null; text: string } | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<{ id: string; label: string; momentId: string | null } | null>(null)
   const [saving, setSaving] = useState(false)
   const busy = disabled || saving
   const save = async (next: DirectorTakeReview) => {
-    if (busy) return
+    if (busy) return false
     setSaving(true)
     try {
       await onSave(validateDirectorTakeReview({ ...next, updated_at: new Date().toISOString() }))
       setEditing(null)
+      return true
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
+      return false
     } finally {
       setSaving(false)
     }
@@ -49,7 +52,7 @@ export function DirectorTakeReviewActions({ review: rawReview, video, positionMs
   const editComment = (momentId: string | null) => {
     onPause()
     const current = momentId === null ? null : review.moments.find(moment => moment.id === momentId)
-    setEditing({ momentId, text: current?.comment ?? '' })
+    setEditing({ momentId, text: momentId === null ? review.comment : current?.comment ?? '' })
   }
   const commitComment = () => {
     if (!editing || busy) return
@@ -89,11 +92,20 @@ export function DirectorTakeReviewActions({ review: rawReview, video, positionMs
       id: crypto.randomUUID(), time_ms: time, liked: false, comment: editing.text,
     }] })
   }
+  const removeComment = async () => {
+    if (!deleteCandidate || busy) return
+    const next = deleteCandidate.momentId === null
+      ? { ...review, comment: '' }
+      : { ...review, moments: review.moments
+        .map(moment => moment.id === deleteCandidate.momentId ? { ...moment, comment: '' } : moment)
+        .filter(moment => moment.liked || moment.comment.trim()) }
+    if (await save(next)) setDeleteCandidate(null)
+  }
 
   const commentRows = [
-    ...(review.comment.trim() ? [{ id: 'whole', label: '整段', text: review.comment, time_ms: null as number | null }] : []),
+    ...(review.comment.trim() ? [{ id: 'whole-comment', label: '整段', text: review.comment, time_ms: null as number | null, momentId: null }] : []),
     ...review.moments.filter(moment => moment.comment.trim()).map(moment => ({
-      id: moment.id, label: formatReviewTime(moment.time_ms), text: moment.comment, time_ms: moment.time_ms,
+      id: moment.id, label: formatReviewTime(moment.time_ms), text: moment.comment, time_ms: moment.time_ms, momentId: moment.id,
     })),
   ]
   const currentEditingComment = editing?.momentId === null
@@ -104,22 +116,30 @@ export function DirectorTakeReviewActions({ review: rawReview, video, positionMs
   return <>
     <div className="director-take-review-rail" aria-label="素材评论">
       <IconButton variant="light" size="compact" icon={<Heart size={18} fill={review.liked ? 'currentColor' : 'none'} />}
-        aria-label="整段点赞" title="整段点赞" disabled={busy} className={review.liked ? 'is-active' : ''} onClick={toggleWholeLike} />
+        aria-label={review.liked ? '取消整段点赞' : '整段点赞'} title={review.liked ? '取消整段点赞' : '整段点赞'}
+        disabled={busy} className={review.liked ? 'is-active' : ''} onClick={toggleWholeLike} />
       <IconButton variant="light" size="compact" icon={<MessageCircle size={18} />}
         aria-label="整段评论" title="整段评论" disabled={busy} onClick={() => editComment(null)} />
       {video && <>
         <IconButton variant="light" size="compact" className={pointIsLiked ? 'is-active' : ''}
           icon={<span className="director-review-point-icon"><Heart size={18} fill={pointIsLiked ? 'currentColor' : 'none'} /><Clock3 size={10} /></span>}
-          aria-label="时间点点赞" title="时间点点赞" disabled={busy || durationMs <= 0} onClick={togglePointLike} />
+          aria-label={pointIsLiked ? '取消时间点点赞' : '时间点点赞'} title={pointIsLiked ? '取消时间点点赞' : '时间点点赞'}
+          disabled={busy || durationMs <= 0} onClick={togglePointLike} />
         <IconButton variant="light" size="compact" icon={<span className="director-review-point-icon"><MessageCircle size={18} /><Clock3 size={10} /></span>}
           aria-label="时间点评论" title="时间点评论" disabled={busy || durationMs <= 0} onClick={editPointComment} />
       </>}
     </div>
     {commentRows.length > 0 && <div className="director-take-review-comments" aria-label="已保存的评论">
-      {commentRows.map(row => <button key={row.id} type="button" onClick={() => row.time_ms !== null && onSeek(row.time_ms)}
-        disabled={row.time_ms === null}>
-        <span>{row.label}</span><span>{row.text}</span>
-      </button>)}
+      {commentRows.map(row => <div key={row.id} className="director-take-review-comment-row">
+        {row.time_ms === null
+          ? <div className="director-take-review-comment-text"><span>{row.label}</span><span>{row.text}</span></div>
+          : <Button variant="ghost" size="mini" className="director-take-review-comment-seek"
+            onClick={() => onSeek(row.time_ms!)}><span>{row.label}</span><span>{row.text}</span></Button>}
+        <IconButton variant="light" size="mini" icon={<Pencil size={13} />} aria-label={`编辑${row.label}评论`}
+          title={`编辑${row.label}评论`} disabled={busy} onClick={() => editComment(row.momentId)} />
+        <IconButton variant="light" size="mini" icon={<Trash2 size={13} />} aria-label={`删除${row.label}评论`}
+          title={`删除${row.label}评论`} disabled={busy} onClick={() => setDeleteCandidate(row)} />
+      </div>)}
     </div>}
     <Dialog open={editing !== null} title={editing?.momentId === null ? '整段评论' : '时间点评论'} tone="dark"
       onOpenChange={open => !open && !saving && setEditing(null)} footer={<>
@@ -131,6 +151,10 @@ export function DirectorTakeReviewActions({ review: rawReview, video, positionMs
         placeholder="写下评论" disabled={busy} onChange={event => setEditing(current => current ? { ...current, text: event.target.value } : current)}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); editing?.momentId?.startsWith('new:') ? commitPointComment() : commitComment() } }} />
     </Dialog>
+    <Dialog open={deleteCandidate !== null} title={`删除${deleteCandidate?.label ?? ''}评论？`} tone="dark"
+      onOpenChange={open => !open && !busy && setDeleteCandidate(null)}
+      footer={<><Button disabled={busy} onClick={() => setDeleteCandidate(null)}>取消</Button>
+        <Button variant="danger" disabled={busy} onClick={() => void removeComment()}>{saving ? '删除中' : '删除'}</Button></>} />
   </>
 }
 

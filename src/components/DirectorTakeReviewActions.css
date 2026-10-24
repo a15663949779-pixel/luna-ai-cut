@@ -34,21 +34,52 @@
   overflow: auto;
 }
 
-.director-take-review-comments button {
+.director-take-review-comment-row {
   display: flex;
+  align-items: center;
   gap: 8px;
   width: fit-content;
   max-width: 100%;
-  padding: 6px 9px;
-  border: 0;
+  padding: 4px 5px;
   border-radius: 8px;
-  color: var(--muted-dark);
   background: rgb(0 0 0 / 64%);
+}
+
+.director-take-review-comment-seek.ui-btn,
+.director-take-review-comment-text {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: auto;
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted-dark);
+  background: transparent;
   text-align: left;
   font: inherit;
   font-size: 12px;
 }
 
-.director-take-review-comments button:not(:disabled) { cursor: pointer; }
-.director-take-review-comments button > span:first-child { color: var(--blue); flex: none; }
-.director-take-review-comments button > span:last-child { overflow-wrap: anywhere; }
+.director-take-review-comment-seek.ui-btn:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 8%);
+}
+
+.director-take-review-comment-row > .ui-icon-btn-light {
+  flex: none;
+}
+
+.director-take-review-comment-seek > span:first-child,
+.director-take-review-comment-text > span:first-child {
+  color: var(--blue);
+  flex: none;
+}
+
+.director-take-review-comment-seek > span:last-child,
+.director-take-review-comment-text > span:last-child {
+  overflow-wrap: anywhere;
+}
